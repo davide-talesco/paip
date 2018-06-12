@@ -1,0 +1,9 @@
+const Paip = require('../index');
+
+const server = Paip({name: 'server'});
+server.nats.connect();
+
+server.expose('add', 'add 2 numbers', function(request){
+  throw new Error('Unexpected error')
+  return Promise.resolve(request.args[0] + request.args[1]);
+});

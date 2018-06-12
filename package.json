@@ -1,0 +1,21 @@
+{
+  "name": "paip",
+  "version": "1.0.0",
+  "description": "Light Framework built around NATS",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "davide talesco",
+  "license": "ISC",
+  "dependencies": {
+    "cat-names": "^1.0.2",
+    "errio": "^1.2.2",
+    "nats": "^0.8.10",
+    "pino": "^4.17.3",
+    "ramda": "^0.25.0",
+    "shortid": "^2.2.8",
+    "stampit": "^4.1.2",
+    "uuid": "^3.2.1"
+  }
+}
