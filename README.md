@@ -3,7 +3,7 @@
 **paip** (read pipe) is a lightweight wrapper around NATS and let `server services` **expose** local methods on NATS subjects
 so that `client services` can **invoke** them remotely. 
 
-`paip services` can also **broadcast** `messages` and **sniff** `request response message tuple`
+`paip services` can also **broadcast** `messages` and **observe** `messages`
 
 Each **paip** service  must provide a service name and an optional namespace. All the subjects exposed by that service
 will be namespaced under **[NAMESPACE.]SERVICE_NAME**
@@ -56,6 +56,15 @@ the incoming messages.
 **IMPORTANT**
 If the service calls expose twice with the same subject, with 2 different handlers, incoming messages will be load balanced between the 2
 handlers, which is probably not what you want. 
+
+## OBSERVE
+
+`paip.observe(subject, handler)`
+
+Argument | Required | Description
+-------- | -------- | -----------
+`subject` | **true** | this is the subject to subscribe to
+`handler` | **true** | this is the handler function to bind the incoming message to
 
 ## INVOKE
 
