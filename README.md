@@ -10,15 +10,15 @@ will be namespaced under **[NAMESPACE.]SERVICE_NAME**
 
 # API
 
-## CONNECT
+## CONSTRUCT
 
-`const paip = Paip.connect(options)`
+`const paip = Paip(options)`
 
 ### OPTIONS SCHEMA
 
 Property Name | Type | Required |  Default | Description
 -------- | -------- | ----------- | -------- | ------- |
-`name` | string | **false** | random |  this is name of the paip service. 
+`name` | string | **true** | N/A |  this is name of the paip service. 
 `namespace` | **false** | '' | this is the base name space for the service
 `nats` | object | **false** | {} | this is the node-nats client connect option object. https://github.com/nats-io/node-nats
 
@@ -35,18 +35,19 @@ Argument | Required | Description
 **paip** internally subscribes on `subject` and whenever a `request message` is received it invokes the `handler` with the message
 and wait a result.
 
-It then wrap the result (or the error thrown by the handler) with a `response message`and publish it back to caller
-at the `request message` unique _INBOX subject.
+It then wraps the result (or the error thrown by the handler) within a `response message`and publishes it back to the caller
+via the `request message` unique _INBOX subject.
 
 The `handler` function should return a value, a promise or simply throw an error.
 
 The `handler`, for known error should provide a statusCode (http status codes) property. If the error has no statusCode 
 **paip** will set it to 500.
 
-If the handler function, to respond needs to call another remote method it can use the `request message` invoke method
-so the new `request message` will maintain the same transactionId.
+If the handler function, to respond needs to call another remote method it can use the `request message` *invoke* method
+so the new `request message` will maintain the same transactionId as the incoming request, and we can trace it.
 
-**pipe** also publishes the `request - response cycle message` (`request message` and `response message`) under **[NAMESPACE.]NAME**.**_LOG**.`subject`
+**pipe** for each received `request message` publishes the `request - response cycle message` (`request message` and `response message`) 
+under **[NAMESPACE.]NAME**.**_LOG**.`subject`
 
 **NOTE**
 The underlying NATS subscription has {'queue':**SERVICE_ID**}. Multiple instance instance of the same service will load balance
@@ -54,7 +55,7 @@ the incoming messages.
 
 **IMPORTANT**
 If the service calls expose twice with the same subject, with 2 different handlers, incoming messages will be load balanced between the 2
-handlers, which is probably not what you probably. 
+handlers, which is probably not what you want. 
 
 ## INVOKE
 
@@ -62,11 +63,11 @@ handlers, which is probably not what you probably.
 
 Argument | Required | Description
 -------- | -------- | -----------
-`subject` | string | **true** | this is the subject where to publish the message
+`subject` | **true** | this is the subject where to publish the message
 `...args` | **true** | this is the list of arguments to send to the remote method
 
-The function returns a Promise that resolves with just the result of the remote method or reject if any error sending, 
-receiving the messages or any error thrown by the remote method.
+The function returns a Promise that resolves with just the result of the remote method or reject if 
+the remote method threw any error or if there was any error sending, receiving the messages .
 
 ## BROADCAST
 
