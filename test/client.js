@@ -4,7 +4,7 @@ const client = Paip({name: 'client'});
 
 client.nats.connect();
 
-client.request().invoke('add', 5, 3)
+client.invoke('server.add', 5, 3)
   .then(console.log)
   .then(()=>{
     client.close();
