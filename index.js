@@ -185,7 +185,7 @@ const Request = stampit({
 
       return this.nats.publish(subject, message)
     },
-    args(){ return this.args}
+    getArgs(){ return this.args}
   }
 });
 

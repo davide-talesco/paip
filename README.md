@@ -159,7 +159,7 @@ function add(x, y){
   return x + y;
 }
 
-server.expose('add', 'add 2 numbers', add);
+server.expose('add', 'add 2 numbers', r => add(...r.getArgs()));
 ```
 
 On a client call the remote method:
