@@ -1,50 +1,103 @@
 const NATS = require('nats');
 const uuidv4 = require('uuid/v4');
 const stampit = require('@stamp/it');
+const Privatize = require('@stamp/privatize');
 const Errio = require('errio');
+const assert = require('assert');
 Errio.setDefaults({stack:true});
+const bunyan = require('bunyan');
 
 const Nats = stampit({
   initializers: [
-    function configureNats({nats}){
+    function ({nats, timeout, log}){
       if (nats) this.options = nats;
+      if (timeout) this.timeout = timeout;
+      if (log) this.log = log;
   }],
   methods: {
     connect() {
+      const log = this.log;
+
       this.connection = NATS.connect(this.options);
-      return this;
+
+      this.connection.on('error', function(err) {
+        log.error({info: 'Nats Connection Error', err});
+      });
+
+      this.connection.on('connect', function(nc) {
+        log.info({info: 'connected to Nats'});
+      });
+
+      this.connection.on('disconnect', function() {
+        log.info({info: 'disconnected from Nats'});
+      });
+
+      this.connection.on('reconnecting', function() {
+        log.info({info: 'reconnecting to Nats'});
+      });
+
+      this.connection.on('reconnect', function(nc) {
+        log.info({info: 'reconnected to Nats'});
+      });
+
+      this.connection.on('close', function() {
+        log.info({info: 'closed Nats connection'});
+      });
     },
-    // TODO to make private ?
-    request(request){
-      // TODO we should be able to pass options like timeout if needed or revert to defaults
+    invoke(request){
+      const log = this.log;
+
+      log.debug({method:'invoke', request});
 
       return new Promise((resolve, reject) => {
-        this.connection.requestOne(request.subject, request, {}, 1000, message => {
-          // response can be an instance of NatsError
-          if(message instanceof NATS.NatsError) {
-            // TODO why if I throw the response instead it doesn't get catched by the invoker catch ?
-            return reject(message);
-          }
-          if(message.statusCode !== 200){
+        this.connection.requestOne(request.subject, request, {}, this.timeout, response => {
 
-            // we got an error from the remote service
-            return reject(Errio.fromObject(message));
+          // response can be an instance of NatsError
+          if(response instanceof NATS.NatsError) {
+            log.debug({method:'invoke', response});
+            log.error({
+              method:'invoke',
+              subject:request.subject,
+              statusCode:response.statusCode,
+              transactionId:request.transactionId,
+              msg:response.message});
+            return reject(response);
           }
-          resolve(message.payload)
+          else if(response.statusCode !== 200){
+            log.debug({method:'invoke', response});
+            log.error({
+              method:'invoke',
+              subject:request.subject,
+              statusCode:response.statusCode,
+              transactionId:request.transactionId,
+              msg:response.message});
+            // we got an error from the remote service
+            return reject(Errio.fromObject(response));
+          }
+          else {
+            log.debug({method:'invoke', response});
+            log.info({
+              method:'invoke',
+              subject:request.subject,
+              statusCode:response.statusCode,
+              transactionId:request.transactionId,
+              msg:response.message});
+            return resolve(response.payload);
+          }
         });
       });
     },
     publish(message){
       return new Promise((resolve, reject) => {
         this.connection.publish(message.subject, message, () => {
-          resolve();
+          resolve(message);
         });
       });
     },
     expose (serviceName, subject, queue, description, handler){
-      // TODO we need to check if the connection exists and is valid
-      // make sure nats is available in callbacks
+      // make sure they are available in callbacks
       const nats = this.connection;
+      const log = this.log;
 
       // build the exposed subject
       const exposedSubject = serviceName + '.' + subject;
@@ -53,8 +106,13 @@ const Nats = stampit({
       const logSubject = serviceName + '._LOG.' + subject;
 
       nats.subscribe(exposedSubject, {queue}, function(request, replyTo) {
-        // TODO what happens if request is invalid. ie.
-        // TODO what happen if no replyTo? ie. a broadcast message on this subject?
+
+        log.debug({method:'expose', request});
+        // if no replyTo? ie. a broadcast message on this subject? simply discard the request
+        if (!replyTo){
+          log.warn({method: 'expose', info:'request is missing replyTo subject', request});
+          return
+        }
 
         Promise.resolve(request)
           .then(handler)
@@ -69,6 +127,15 @@ const Nats = stampit({
             nats.publish(replyTo, response);
             // also publish the tuple request response for monitoring
 
+            log.debug({method:'expose', response});
+            log.info({
+              method:'expose',
+              service:request.service,
+              subject:request.subject,
+              statusCode:response.statusCode,
+              transactionId:request.transactionId,
+              msg:response.message});
+
             nats.publish(logSubject, {request, response});
           })
           .catch(err => {
@@ -80,6 +147,14 @@ const Nats = stampit({
               payload: Errio.stringify(err)
             };
             nats.publish(replyTo, response);
+            log.error({
+              method:'expose',
+              service:request.service,
+              subject:request.subject,
+              statusCode:response.statusCode,
+              transactionId:request.transactionId,
+              msg:response.message});
+            log.debug({method:'expose', response});
             nats.publish(logSubject, {request, response});
           })
       });
@@ -94,7 +169,8 @@ const Nats = stampit({
   props: {
     options: {
       json: true
-    }
+    },
+    timeout: 1000
   }
 });
 
@@ -144,35 +220,96 @@ const Request = stampit({
         transactionId: this.transactionId
       };
 
-      return this.nats.request(request)
+      return this.nats.invoke(request)
     },
     broadcast(subject, payload){
       // to call the invoke on the client
       const message = {
         subject,
         service: this.service.name,
-        payload: payload
+        payload: payload,
+        transactionId: this.transactionId
       };
 
       return this.nats.publish(message)
     },
-    getArgs(){ return this.args}
+    args(){ return this.args}
   }
 });
 
 const Paip = stampit({
   initializers: [
-    ({nats}, { instance }) => {
-     instance.nats = Nats({nats});
-  },
     ({name, namespace}, { instance }) => {
      instance.service = Service({name, namespace});
+  },
+    ({logLevel}, { instance }) => {
+      // TODO test if it brakes when logLevel is an unsupported thing
+      // support turning off completely logging
+      if (logLevel === 'off'){
+        logLevel = bunyan.FATAL + 1;
+      }
+      instance.log = bunyan.createLogger({name: instance.service.name, level: logLevel || 'info'});
+  },
+    ({nats, timeout}, { instance }) => {
+      instance.nats = Nats({nats, timeout, log:instance.log});
+      // connect to NATS
+      instance.nats.connect();
   }],
   methods: {
+    getConnection() {
+      return this.nats.connect();
+    },
     invoke(subject, ...args) {
-      return Request({nats: this.nats, service: this.service}).invoke(subject, ...args)
+
+      const log = this.log;
+
+      try{
+        assert(subject, 'subject is required when invoking a remote method')
+      }
+      catch(e){
+        return Promise.reject(e)
+      }
+
+      return Request({nats: this.nats, service: this.service})
+        .invoke(subject, ...args)
+    },
+    broadcast(subject, message) {
+
+      const log = this.log;
+
+      try{
+        assert(subject, 'subject is required when broadcasting a message')
+      }
+      catch(e){
+        return Promise.reject(e)
+      }
+      return Request({nats: this.nats, service: this.service})
+        .broadcast(subject, message)
+        .then(message =>{
+          log.info({
+            method:'broadcast',
+            subject:message.subject,
+            transactionId:message.transactionId});
+          log.debug({method:'broadcast', message});
+          return message
+        })
+        .catch(err=> {
+          log.error({method: 'broadcast', subject, err});
+          throw err
+        })
     },
     expose(subject, description, handler){
+      const log = this.log;
+
+      // if no handler maybe description has not been passed
+      if(!handler){
+        handler = description;
+        description = '';
+      }
+
+      assert(subject, 'subject is required when exposing a remote method');
+      assert(typeof handler === 'function', 'handler is required and should be a function');
+
       // the name of the queue map to the name of the service
       const queue = this.service.name;
       // make sure nats is available within expose closure
@@ -189,49 +326,40 @@ const Paip = stampit({
         });
 
         return Promise.resolve(request)
-          .then(handler);
-      });
-    },
-    // TODO add the subject to sniff need first to fix issue @ line 69
-    observe(subject, handler){
-      // the name of the queue to join map to the service id (composed as BASE_SUBJECT_SPACE.SERVICE_NAME)
-      const queue = this.service.id;
-      // TODO what happens if handler fails?
-      this.nats.subscribe(subject, queue, function(msg){
-        Promise.resolve(msg)
           .then(handler)
-          .catch(console.error)
-      })
+
+      });
+
+      log.info({info: 'Exposed method on NATS', subject, queue, description})
+    },
+    observe(subject, handler){
+      const log = this.log;
+
+      assert(subject, 'subject is required when observing...');
+      assert(typeof handler === 'function', 'handler is required and should be a function');
+
+      const queue = this.service.id;
+      this.nats.subscribe(subject, queue, function(message){
+
+        log.info({method: 'observe', subject});
+        log.debug({method: 'observe', subject, message});
+
+        Promise.resolve(message)
+          .then(handler)
+          .catch(err => log.error({method: 'observe', err}))
+      });
+      log.info({info: 'observing NATS subject', subject, queue})
     },
     close(){
       return new Promise((resolve, reject)=> {
         const connection = this.nats.connection;
         connection.flush(function() {
           connection.close();
+          resolve();
         });
       });
     }
   }
-});
+}).compose(Privatize);
 
 module.exports = Paip;
-
-/*
-// client shoule be able to expose a function
-client.expose('login', function(request){
-  // once we get a request we should be able to extract its arguments
-  const [username, password] = request.getArgs();
-  // client can also make other request using the request object so the request keeps the same transactionId
-  request.make('user', username)
-  // response should be the payload of the response if the exposer returned an error it should be thrown
-    .then(response => {
-
-    })
-  // no catch here as if this fails this is the error paip will return to the caller
-});
-
-// client can create a request send it
-client.request().make('login', 'davide', '1234')
-  .then(user => {})
-  .catch(err => {})*/
-

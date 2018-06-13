@@ -1,8 +1,7 @@
 const Paip = require('../index');
 
-const observer = Paip({name: 'observer'});
-observer.nats.connect();
+const observer = Paip({name: 'observer', logLevel:'off'});
 
-observer.observe('server._LOG.add', function(request){
+observer.observe('math._LOG.>', function(request){
   console.log(JSON.stringify(request))
 })

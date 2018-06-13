@@ -1,16 +1,16 @@
 # paip
 
-**paip** (read pipe) is a lightweight wrapper around NATS and let `server services` **expose** local methods on NATS subjects
+**paip** (read pipe) is a lightweight microservice toolkit built around NATS and let `server services` **expose** local methods on NATS subjects
 so that `client services` can **invoke** them remotely. 
 
 `paip services` can also **broadcast** `messages` and **observe** `messages`
 
-Each **paip** service  must provide a service name and an optional namespace. All the subjects exposed by that service
+Each **paip** service must provide a service name and an optional namespace. All the subjects exposed by that service
 will be namespaced under **[NAMESPACE.]SERVICE_NAME**
 
 # API
 
-## CONSTRUCT
+## CONSTRUCT Paip Object
 
 `const paip = Paip(options)`
 
@@ -20,7 +20,16 @@ Property Name | Type | Required |  Default | Description
 -------- | -------- | ----------- | -------- | ------- |
 `name` | string | **true** | N/A |  this is name of the paip service. 
 `namespace` | **false** | '' | this is the base name space for the service
-`nats` | object | **false** | {} | this is the node-nats client connect option object. https://github.com/nats-io/node-nats
+`nats` | object | **false** | {} | this is the node-nats client connect option object https://github.com/nats-io/node-nats
+`timeout` | number | **false** | 1000 | this is the milliseconds paip wait before declaring a request timed out
+`logLevel` | string | **false** | info | this is the error level passed to bunyan logger instance. check bunyan for supported error levels
+it also supports `off` to completely disable logging
+
+## GET NATS SOCKET CONNECTION REFERENCE (for connection error handling)
+
+`const paip.getConnection()`
+
+return an Event Emitter that exposes internal nats events. (its the object returned by NATS.connect() in https://github.com/nats-io/node-nats)
 
 ## EXPOSE
 
@@ -91,6 +100,15 @@ The function return a Promise that resolves with no result or reject if any erro
 
 # MESSAGES
 
+## BROADCAST OBJECT
+
+Property Name | Type | Required | Description
+-------- | -------- | ----------- | ------- |
+`subject` | object | **false** | this is the subject where to publish the request
+`service` | string | **false** | this is the name of the service making the request
+`transactionId` | string | **false** | this is the transactionId of the request
+`payload` | object | **false** | this is the payload of the message
+
 ## REQUEST OBJECT
 
 Property Name | Type | Required | Description
@@ -115,7 +133,7 @@ The request object that expose handlers will receive has the following interface
 
 Property Name | Return Type |  Description
 -------- | -------- | ------- |
-`getArgs` | array  | this is the method to get the args of the request
+`args` | array  | this is the method to get the args of the request
 `invoke` | Promise(result)  | this is the method to make another request with the same transactionId of the incoming request (transaction)
 `broadcast` | Promise()  | this is the method to send a broadcast message
 
