@@ -1,4 +1,4 @@
-#PAIP
+# PAIP
 
 **paip** (read pipe) is a lightweight microservice toolkit built around NATS and let `server services` **expose** local methods on NATS subjects
 so that `client services` can **invoke** them remotely. 
@@ -8,13 +8,13 @@ so that `client services` can **invoke** them remotely.
 Each **paip** service must provide a service name and an optional namespace. All the subjects exposed by that service
 will be namespaced under **[NAMESPACE.]SERVICE_NAME**
 
-#API
+# API
 
-##CONSTRUCTOR
+## CONSTRUCTOR
 
 `const paip = Paip(options)`
 
-###OPTIONS 
+### OPTIONS 
 
 Property Name | Type | Required |  Default | Description
 -------- | -------- | ----------- | -------- | ------- |
@@ -24,7 +24,7 @@ Property Name | Type | Required |  Default | Description
 `timeout` | number | **false** | 1000 | this is the milliseconds paip wait before declaring a request timed out
 `logLevel` | string | **false** | info | this is the error level passed to bunyan logger instance. check bunyan for supported error levels it also supports `off` to completely disable logging
 
-##NATS Socket Connection Reference (for connection error handling)
+## NATS Socket Connection Reference (for connection error handling)
 
 Paip connect to Nats, so you don't need to do anything about that. Anyway the microservice code should get a reference to 
 the underlying Nats socket connection so can decide what of disconnections / NATS errors.
@@ -34,7 +34,7 @@ This is how you get a reference to the Nats connection
 
 (its the object returned by NATS.connect() in https://github.com/nats-io/node-nats)
 
-##EXPOSE
+## EXPOSE
 
 With expose you can ... expose a function on a NATS subject:
 
@@ -71,7 +71,7 @@ the incoming messages.
 If the service calls expose twice with the same subject, with 2 different handlers, incoming messages will be load balanced between the 2
 handlers, which is probably not what you want. 
 
-##OBSERVE
+## OBSERVE
 Paip can also observe messages passively, without interacting with the caller.
  
 `paip.observe(subject, handler)`
@@ -81,7 +81,7 @@ Argument | Required | Description
 `subject` | **true** | this is the subject to subscribe to
 `handler` | **true** | this is the handler function to bind the incoming message to
 
-##INVOKE
+## INVOKE
 With invoke a service can execute a remote method exposed over nats:
  
 `paip.invoke(subject, ...args)`
@@ -94,7 +94,7 @@ Argument | Required | Description
 The function returns a Promise that resolves with just the result of the remote method or reject if 
 the remote method threw any error or if there was any error sending, receiving the messages .
 
-##BROADCAST
+## BROADCAST
 A service can publish a message without expecting any reply:
 
 `paip.broadcast(subject, message)`
@@ -106,9 +106,9 @@ Argument | Required | Description
 
 The function returns a Promise that resolves with no result or reject if any error publishing the message;
 
-#MESSAGES
+# MESSAGES
 
-##BROADCAST OBJECT
+## BROADCAST OBJECT
 
 Property Name | Type | Required | Description
 -------- | -------- | ----------- | ------- |
@@ -117,7 +117,7 @@ Property Name | Type | Required | Description
 `transactionId` | string | **false** | this is the transactionId of the request
 `payload` | object | **false** | this is the payload of the message
 
-##REQUEST OBJECT
+## REQUEST OBJECT
 
 Property Name | Type | Required | Description
 -------- | -------- | ----------- | ------- |
@@ -126,7 +126,7 @@ Property Name | Type | Required | Description
 `service` | string | **false** | this is the name of the service making the request
 `transactionId` | string | **false** | this is the transactionId of the request
 
-##RESPONSE OBJECT
+## RESPONSE OBJECT
 
 Property Name | Type | Required | Description
 -------- | -------- | ----------- | ------- |
@@ -145,7 +145,7 @@ Property Name | Return Type |  Description
 `invoke` | Promise(result)  | this is the method to make another request with the same transactionId of the incoming request
 `broadcast` | Promise()  | this is the method to send a broadcast message
 
-#USAGE
+# USAGE
 
 Expose a local method `add` remotely on subject `add`:
 
