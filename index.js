@@ -87,25 +87,19 @@ const Nats = stampit({
         });
       });
     },
-    publish(message){
+    publish(subject, message){
       return new Promise((resolve, reject) => {
-        this.connection.publish(message.subject, message, () => {
+        this.connection.publish(subject, message, () => {
           resolve(message);
         });
       });
     },
-    expose (serviceName, subject, queue, description, handler){
+    expose (subject, queue, description, handler){
       // make sure they are available in callbacks
       const nats = this.connection;
       const log = this.log;
 
-      // build the exposed subject
-      const exposedSubject = serviceName + '.' + subject;
-
-      // build the subject to follow **SERVICENAME**.**_LOG**.`subject`
-      const logSubject = serviceName + '._LOG.' + subject;
-
-      nats.subscribe(exposedSubject, {queue}, function(request, replyTo) {
+      nats.subscribe(subject, {queue}, function(request, replyTo) {
 
         log.debug({method:'expose', request});
         // if no replyTo? ie. a broadcast message on this subject? simply discard the request
@@ -113,53 +107,11 @@ const Nats = stampit({
           log.warn({method: 'expose', info:'request is missing replyTo subject', request});
           return
         }
-
-        Promise.resolve(request)
-          .then(handler)
-          .then(responsePayload => {
-            const response = {
-              transactionId: request.transactionId,
-              statusCode: 200,
-              message: description,
-              payload: responsePayload
-            };
-            // publish reply
-            nats.publish(replyTo, response);
-            // also publish the tuple request response for monitoring
-
-            log.debug({method:'expose', response});
-            log.info({
-              method:'expose',
-              service:request.service,
-              subject:request.subject,
-              statusCode:response.statusCode,
-              transactionId:request.transactionId,
-              msg:response.message});
-
-            nats.publish(logSubject, {request, response});
-          })
-          .catch(err => {
-            // handler threw an error we need to wrap it around a response message
-            const response = {
-              transactionId: request.transactionId,
-              statusCode: err.statusCode || 500,
-              message: err.message,
-              payload: Errio.stringify(err)
-            };
-            nats.publish(replyTo, response);
-            log.error({
-              method:'expose',
-              service:request.service,
-              subject:request.subject,
-              statusCode:response.statusCode,
-              transactionId:request.transactionId,
-              msg:response.message});
-            log.debug({method:'expose', response});
-            nats.publish(logSubject, {request, response});
-          })
-      });
+        // pass the request to the Paip handler
+        handler(request, replyTo)
 
       // this function return nothing
+      });
     },
     subscribe (subject, queue, handler){
       const nats = this.connection;
@@ -231,7 +183,7 @@ const Request = stampit({
         transactionId: this.transactionId
       };
 
-      return this.nats.publish(message)
+      return this.nats.publish(subject, message)
     },
     args(){ return this.args}
   }
@@ -315,19 +267,63 @@ const Paip = stampit({
       // make sure nats is available within expose closure
       const nats = this.nats;
       const service = this.service;
+      const fullSubjectName = service.name + '.' + subject;
 
-      this.nats.expose(service.name, subject, queue, description, function(message){
+      this.nats.expose(fullSubjectName, queue, description, function(originalRequest, replyTo){
 
         // we need to parse the request message into a Request Object
         const request = Request({
           nats: nats,
           service: service,
-          message
+          message: originalRequest
         });
+
+        // build the subject to follow **SERVICENAME**.**_LOG**.`subject`
+        const logSubject = service.name + '._LOG.' + subject;
 
         return Promise.resolve(request)
           .then(handler)
+          .then(responsePayload => {
+            const response = {
+              transactionId: request.transactionId,
+              statusCode: 200,
+              message: description,
+              payload: responsePayload
+            };
+            // publish reply
+            nats.publish(replyTo, response);
+            // also publish the tuple request response for monitoring
 
+            log.debug({method:'expose', response});
+            log.info({
+              method:'expose',
+              service:request.service,
+              subject:request.subject,
+              statusCode:response.statusCode,
+              transactionId:request.transactionId,
+              msg:response.message});
+              // we should use the original request we got from the wire and not the one we recreated locally as that ones contains methods as well
+            nats.publish(logSubject, {request:originalRequest, response});
+          })
+          .catch(err => {
+            // handler threw an error we need to wrap it around a response message
+            const response = {
+              transactionId: request.transactionId,
+              statusCode: err.statusCode || 500,
+              message: err.message,
+              payload: Errio.stringify(err)
+            };
+            nats.publish(replyTo, response);
+            log.error({
+              method:'expose',
+              service:request.service,
+              subject:request.subject,
+              statusCode:response.statusCode,
+              transactionId:request.transactionId,
+              msg:response.message});
+            log.debug({method:'expose', response});
+            nats.publish(logSubject, {request:originalRequest, response});
+          })
       });
 
       log.info({info: 'Exposed method on NATS', subject, queue, description})
