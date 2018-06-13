@@ -1,6 +1,6 @@
 # PAIP
 
-**paip** (read pipe) is a lightweight microservice toolkit built around NATS and let `server services` **expose** local methods on NATS subjects
+**PAIP** (read pipe) is a lightweight microservice toolkit built around NATS and let `server services` **expose** local methods on NATS subjects
 so that `client services` can **invoke** them remotely. 
 
 `paip services` can also **broadcast** `messages` and **observe** `messages`
@@ -21,7 +21,7 @@ Property Name | Type | Required |  Default | Description
 `name` | string | **true** | N/A |  this is name of the paip service. 
 `namespace` | string | **false** | '' | this is the base name space for the service
 `nats` | object | **false** | {} | this is the node-nats client connect option object https://github.com/nats-io/node-nats
-`timeout` | number | **false** | 1000 | this is the milliseconds paip wait before declaring a request timed out
+`timeout` | number | **false** | 5000 | this is the milliseconds paip wait before declaring a request timed out
 `logLevel` | string | **false** | info | this is the error level passed to bunyan logger instance. check bunyan for supported error levels it also supports `off` to completely disable logging
 
 ## NATS Socket Connection Reference (for connection error handling)

@@ -122,7 +122,7 @@ const Nats = stampit({
     options: {
       json: true
     },
-    timeout: 1000
+    timeout: 5000
   }
 });
 
