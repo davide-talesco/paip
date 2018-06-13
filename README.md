@@ -27,9 +27,10 @@ Property Name | Type | Required |  Default | Description
 ## NATS Socket Connection Reference (for connection error handling)
 
 Paip connect to Nats, so you don't need to do anything about that. Anyway the microservice code should get a reference to 
-the underlying Nats socket connection so can decide what of disconnections / NATS errors.
+the underlying Nats socket connection so can decide how to handle disconnections / NATS errors.
 
-This is how you get a reference to the Nats connection
+This is how you get a reference to the Nats connection:
+
 `const paip.getConnection()`
 
 (its the object returned by NATS.connect() in https://github.com/nats-io/node-nats)
@@ -47,10 +48,10 @@ Argument | Required | Description
 `handler` | **true** | this is the handler that will be called whenever paip receive a new `request message` on `subject`
 
 **paip** internally subscribes on `subject` and whenever a `request message` is received it invokes the `handler` with the message
-and wait a result. Check [request object api](#request-api)
+and wait a result. Check [request object api](#request-api) to understand how to interact with it.
 
-It then wraps the result (or the error thrown by the handler) within a `response message`and publishes it back to the caller
-via the `request message` unique _INBOX subject.
+It then wraps the result returned (or the error thrown) by the handler within a `response message`and publishes it back to the caller
+via the `request message` unique _INBOX subject. check official nats client documentation for more info on what _INBOX subject is.
 
 The `handler` function should return a value, a promise or simply throw an error.
 
@@ -61,10 +62,10 @@ If the handler function, to respond, needs to call another remote method it can 
 so the new `request message` will maintain the same transactionId as the incoming request, and we can trace it.
 
 **pipe** for each received `request message`, after the `response message` has been published, publishes also a log message
- {`request`, `response`}) under **[NAMESPACE.]SERVICE_NAME**.**_LOG**.`subject`
+ {`request`, `response`} under **[NAMESPACE.]SERVICE_NAME**.**_LOG**.`subject`
 
 **NOTE**
-The underlying NATS subscription has {'queue':**SERVICE_NAME**}. Multiple instance of the same service will load balance
+The underlying NATS subscription has {'queue':**SERVICE_NAME**}. Multiple instances of the same service will load balance
 the incoming messages.
 
 **IMPORTANT**
@@ -72,7 +73,7 @@ If the service calls expose twice with the same subject, with 2 different handle
 handlers, which is probably not what you want. 
 
 ## OBSERVE
-Paip can also observe messages passively, without interacting with the caller.
+**PAIP** can also observe messages passively, without interacting with the caller.
  
 `paip.observe(subject, handler)`
 
@@ -92,7 +93,7 @@ Argument | Required | Description
 `...args` | **true** | this is the list of arguments to send to the remote method
 
 The function returns a Promise that resolves with just the result of the remote method or reject if 
-the remote method threw any error or if there was any error sending, receiving the messages .
+the remote method threw any error or if there was any error sending /receiving the messages .
 
 ## BROADCAST
 A service can publish a message without expecting any reply:
