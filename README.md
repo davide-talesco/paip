@@ -135,7 +135,7 @@ Property Name | Type | Required | Description
 `message` | string | **false** | this is an optional message the server can add
 `transactionId` | string | **false** | this is the transactionId of the request
 
-##REQUEST API
+## REQUEST API
 
 The request object that **expose** handlers will receive has the following interfaces:
 
