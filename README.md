@@ -19,26 +19,31 @@ will be namespaced under **[NAMESPACE.]SERVICE_NAME**
 Property Name | Type | Required |  Default | Description
 -------- | -------- | ----------- | -------- | ------- |
 `name` | string | **true** | N/A |  this is name of the paip service. 
-`namespace` | **false** | '' | this is the base name space for the service
+`namespace` | string | **false** | '' | this is the base name space for the service
 `nats` | object | **false** | {} | this is the node-nats client connect option object https://github.com/nats-io/node-nats
 `timeout` | number | **false** | 1000 | this is the milliseconds paip wait before declaring a request timed out
-`logLevel` | string | **false** | info | this is the error level passed to bunyan logger instance. check bunyan for supported error levels
-it also supports `off` to completely disable logging
+`logLevel` | string | **false** | info | this is the error level passed to bunyan logger instance. check bunyan for supported error levels it also supports `off` to completely disable logging
 
-## GET NATS SOCKET CONNECTION REFERENCE (for connection error handling)
+## GET NATS Socket Connection Reference (for connection error handling)
 
+Paip connect to Nats, so you don't need to do anything about that. Anyway the microservice code should get a reference to 
+the underlying Nats socket connection so can decide what of disconnections / NATS errors.
+
+This is how you get a reference to the Nats connection
 `const paip.getConnection()`
 
-return an Event Emitter that exposes internal nats events. (its the object returned by NATS.connect() in https://github.com/nats-io/node-nats)
+(its the object returned by NATS.connect() in https://github.com/nats-io/node-nats)
 
 ## EXPOSE
+
+With expose you can ... expose a function on a NATS subject:
 
 `paip.expose(subject, description, handler)`
 
 Argument | Required | Description
 -------- | -------- | -----------
 `subject` | **true** | this is the NATS subject where to expose the function
-`description` | **true** | this is the description of this remote method
+`description` | **false** | this is the description of this remote method
 `handler` | **true** | this is the handler that will be called whenever paip receive a new `request message` on `subject`
 
 **paip** internally subscribes on `subject` and whenever a `request message` is received it invokes the `handler` with the message
@@ -49,17 +54,17 @@ via the `request message` unique _INBOX subject.
 
 The `handler` function should return a value, a promise or simply throw an error.
 
-The `handler`, for known error should provide a statusCode (http status codes) property. If the error has no statusCode 
+For known error , the handler should provide a **statusCode** (http status codes) property. If the error has no statusCode 
 **paip** will set it to 500.
 
-If the handler function, to respond needs to call another remote method it can use the `request message` *invoke* method
+If the handler function, to respond, needs to call another remote method it can use the `request message` *invoke* method
 so the new `request message` will maintain the same transactionId as the incoming request, and we can trace it.
 
-**pipe** for each received `request message` publishes the `request - response cycle message` (`request message` and `response message`) 
-under **[NAMESPACE.]NAME**.**_LOG**.`subject`
+**pipe** for each received `request message`, after the `response message` has been published, publishes also a log message
+ {`request`, `response`}) under **[NAMESPACE.]SERVICE_NAME**.**_LOG**.`subject`
 
 **NOTE**
-The underlying NATS subscription has {'queue':**SERVICE_ID**}. Multiple instance instance of the same service will load balance
+The underlying NATS subscription has {'queue':**SERVICE_NAME**}. Multiple instance of the same service will load balance
 the incoming messages.
 
 **IMPORTANT**
@@ -67,7 +72,8 @@ If the service calls expose twice with the same subject, with 2 different handle
 handlers, which is probably not what you want. 
 
 ## OBSERVE
-
+Paip can also observe messages passively, without interacting with the caller.
+ 
 `paip.observe(subject, handler)`
 
 Argument | Required | Description
@@ -76,7 +82,8 @@ Argument | Required | Description
 `handler` | **true** | this is the handler function to bind the incoming message to
 
 ## INVOKE
-
+With invoke a service can execute a remote method exposed over nats:
+ 
 `paip.invoke(subject, ...args)`
 
 Argument | Required | Description
@@ -88,6 +95,7 @@ The function returns a Promise that resolves with just the result of the remote 
 the remote method threw any error or if there was any error sending, receiving the messages .
 
 ## BROADCAST
+A service can publish a message without expecting any reply:
 
 `paip.broadcast(subject, message)`
 
@@ -96,7 +104,7 @@ Argument | Required | Description
 `subject` | string | **true** | this is the subject where to publish the message
 `message` | **true** | this is the `broadcast message` to be sent
 
-The function return a Promise that resolves with no result or reject if any error publishing the message;
+The function returns a Promise that resolves with no result or reject if any error publishing the message;
 
 # MESSAGES
 
@@ -129,12 +137,12 @@ Property Name | Type | Required | Description
 
 ## REQUEST API
 
-The request object that expose handlers will receive has the following interfaces:
+The request object that **expose** handlers will receive has the following interfaces:
 
 Property Name | Return Type |  Description
 -------- | -------- | ------- |
-`args` | array  | this is the method to get the args of the request
-`invoke` | Promise(result)  | this is the method to make another request with the same transactionId of the incoming request (transaction)
+`getArgs` | array  | this is the method to get the args of the request
+`invoke` | Promise(result)  | this is the method to make another request with the same transactionId of the incoming request
 `broadcast` | Promise()  | this is the method to send a broadcast message
 
 # USAGE
