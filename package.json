@@ -9,9 +9,9 @@
   "author": "davide talesco",
   "license": "ISC",
   "dependencies": {
+    "@stamp/instanceof": "^1.0.1",
     "@stamp/it": "^1.0.3",
     "@stamp/privatize": "^1.0.2",
-    "bunyan": "^1.8.12",
     "errio": "^1.2.2",
     "nats": "^0.8.10",
     "ramda": "^0.25.0",

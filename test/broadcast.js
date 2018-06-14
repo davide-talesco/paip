@@ -1,6 +1,6 @@
 const Paip = require('../index');
 
-const client = Paip({name: 'broadcast', timeout:5000});
+const client = Paip({name: 'broadcast', timeout:5000, logLevel: 'off'});
 
 client.broadcast('math.add', 'I am a bastard')
   .then(console.log)

@@ -1,88 +1,66 @@
 const NATS = require('nats');
 const uuidv4 = require('uuid/v4');
 const stampit = require('@stamp/it');
+const InstanceOf = require('@stamp/instanceof');
 const Privatize = require('@stamp/privatize');
 const Errio = require('errio');
 const assert = require('assert');
 Errio.setDefaults({stack:true});
-const bunyan = require('bunyan');
 
 const Nats = stampit({
   initializers: [
-    function ({nats, timeout, log}){
+    function ({nats, timeout, Log}){
       if (nats) this.options = nats;
       if (timeout) this.timeout = timeout;
-      if (log) this.log = log;
+      if (Log) this.Log = Log;
   }],
   methods: {
     connect() {
-      const log = this.log;
+      // create a new logger instance
+      const log = this.Log().set({component: 'nats'});
 
       this.connection = NATS.connect(this.options);
 
       this.connection.on('error', function(err) {
-        log.error({info: 'Nats Connection Error', err});
+        log.set({message: 'Nats Connection Error'}).error(err);
       });
 
       this.connection.on('connect', function(nc) {
-        log.info({info: 'connected to Nats'});
+        log.set({message: 'connected to Nats'}).info();
       });
 
       this.connection.on('disconnect', function() {
-        log.info({info: 'disconnected from Nats'});
+        log.set({message: 'disconnected from Nats'}).info();
       });
 
       this.connection.on('reconnecting', function() {
-        log.info({info: 'reconnecting to Nats'});
+        log.set({message: 'reconnecting to Nats'}).info();
       });
 
       this.connection.on('reconnect', function(nc) {
-        log.info({info: 'reconnected to Nats'});
+        log.set({message: 'reconnected to Nats'}).info();
       });
 
       this.connection.on('close', function() {
-        log.info({info: 'closed Nats connection'});
+        log.set({message: 'closed Nats connection'}).info();
       });
     },
     invoke(request){
-      const log = this.log;
-
-      log.debug({method:'invoke', request});
 
       return new Promise((resolve, reject) => {
         this.connection.requestOne(request.subject, request, {}, this.timeout, response => {
 
           // response can be an instance of NatsError
           if(response instanceof NATS.NatsError) {
-            log.debug({method:'invoke', response});
-            log.error({
-              method:'invoke',
-              subject:request.subject,
-              statusCode:response.statusCode,
-              transactionId:request.transactionId,
-              msg:response.message});
+            response.statusCode = 500;
             return reject(response);
           }
+          // statusCode is set to 200 from the expose method if its handler resolved
           else if(response.statusCode !== 200){
-            log.debug({method:'invoke', response});
-            log.error({
-              method:'invoke',
-              subject:request.subject,
-              statusCode:response.statusCode,
-              transactionId:request.transactionId,
-              msg:response.message});
-            // we got an error from the remote service
             return reject(Errio.fromObject(response));
           }
           else {
-            log.debug({method:'invoke', response});
-            log.info({
-              method:'invoke',
-              subject:request.subject,
-              statusCode:response.statusCode,
-              transactionId:request.transactionId,
-              msg:response.message});
-            return resolve(response.payload);
+            return resolve(response);
           }
         });
       });
@@ -97,14 +75,13 @@ const Nats = stampit({
     expose (subject, queue, description, handler){
       // make sure they are available in callbacks
       const nats = this.connection;
-      const log = this.log;
+      const log = this.Log().set({component: 'nats'});
 
       nats.subscribe(subject, {queue}, function(request, replyTo) {
 
-        log.debug({method:'expose', request});
         // if no replyTo? ie. a broadcast message on this subject? simply discard the request
         if (!replyTo){
-          log.warn({method: 'expose', info:'request is missing replyTo subject', request});
+          log.set({message:'request is missing replyTo subject', request}).warn();
           return
         }
         // pass the request to the Paip handler
@@ -137,126 +114,104 @@ const Service = stampit({
   ]
 });
 
-const Request = stampit({
-  initializers: [
-    // this is to make the nats api available within the request closure
-    function({nats}){
-      this.nats = nats;
-    },
-    // this is to make the service api available within the request closure
-    function({service}){
-      this.service = service;
-    },
-    // this is the case when we are reconstructing a request from a serialized message
-    function({message}){
-      if (message && message.transactionId){
-        this.transactionId = message.transactionId;
-      }
-      else{
-        this.transactionId = uuidv4();
-      }
-      if (message && message.args){
-        this.args = message.args;
-      }
-      if (message && message.subject){
-        this.subject = message.subject;
-      }
-    }],
-  methods: {
-    invoke(subject, ...args){
-      // to call the invoke on the client
-      const request = {
-        subject,
-        args,
-        service: this.service.name,
-        transactionId: this.transactionId
-      };
-
-      return this.nats.invoke(request)
-    },
-    broadcast(subject, payload){
-      // to call the invoke on the client
-      const message = {
-        subject,
-        service: this.service.name,
-        payload: payload,
-        transactionId: this.transactionId
-      };
-
-      return this.nats.publish(subject, message)
-    },
-    getArgs(){ return this.args}
-  }
-});
-
 const Paip = stampit({
   initializers: [
     ({name, namespace}, { instance }) => {
      instance.service = Service({name, namespace});
   },
     ({logLevel}, { instance }) => {
-      // TODO test if it brakes when logLevel is an unsupported thing
-      // support turning off completely logging
-      if (logLevel === 'off'){
-        logLevel = bunyan.FATAL + 1;
+      instance.Log = Logger.conf({client: instance.service.name});
+      if (logLevel){
+        instance.Log = Logger.conf({logLevel});
       }
-      instance.log = bunyan.createLogger({name: instance.service.name, level: logLevel || 'info'});
   },
     ({nats, timeout}, { instance }) => {
-      instance.nats = Nats({nats, timeout, log:instance.log});
+      instance.nats = Nats({nats, timeout, Log:instance.Log});
       // connect to NATS
       instance.nats.connect();
   }],
   methods: {
     getConnection() {
-      return this.nats.connect();
+      return this.nats.connection;
     },
     invoke(subject, ...args) {
+      // initialize logger instance for current invoke call TODO is this slow ??
+      const log = this.Log().set({method: 'invoke'});
 
-      const log = this.log;
+      var request;
 
-      try{
-        assert(subject, 'subject is required when invoking a remote method')
+      // if subject is already a IncomingRequest it means invoke has been called from within expose hence it is already a Request object
+      if (subject instanceof IncomingRequest){
+        request = subject;
       }
-      catch(e){
-        return Promise.reject(e)
+      else{
+        try{
+          request = Request({client: this.service.name, subject, args});
+        }
+        catch(e){
+          return Promise.reject(e)
+        }
       }
 
-      return Request({nats: this.nats, service: this.service})
-        .invoke(subject, ...args)
+      // set the request
+      log.set({request});
+
+      return this.nats.invoke(request.serialize())
+        .then(response => IncomingResponse({response}))
+        .then(response => {
+          // set the response and log the content of log
+          log.set({response}).info();
+
+          return response.getPayload();
+        })
+        .catch(err => {
+          // set the error and log the content of log
+          log.error(err);
+          throw err
+        });
     },
     broadcast(subject, message) {
 
-      const log = this.log;
+      const log = this.Log().set({method: 'broadcast'});
 
-      try{
-        assert(subject, 'subject is required when broadcasting a message')
+      var broadcastMessage;
+
+      // if subject is already a BroadcastMessage it means broadcast has been called from within expose
+      if (subject instanceof BroadcastMessage){
+        broadcastMessage = subject;
       }
-      catch(e){
-        return Promise.reject(e)
+      else{
+        try{
+          broadcastMessage = BroadcastMessage(subject, message);
+        }
+        catch(e){
+          return Promise.reject(e)
+        }
       }
-      return Request({nats: this.nats, service: this.service})
-        .broadcast(subject, message)
-        .then(message =>{
-          log.info({
-            method:'broadcast',
-            subject:message.subject,
-            transactionId:message.transactionId});
-          log.debug({method:'broadcast', message});
-          return message
+
+      log.set({broadcastMessage});
+
+      return this.nats.publish(subject, broadcastMessage)
+        .then(response => {
+          log.info();
+
+          return response.payload;
         })
-        .catch(err=> {
-          log.error({method: 'broadcast', subject, err});
+        .catch(err => {
+          // set the error and log the content of log
+          log.error(err);
           throw err
-        })
+        });
     },
     expose(subject, description, handler){
-      const log = this.log;
+      // get an handle to the Paip Log stamp
+      const Log = this.Log;
+      const paip = this;
 
       // if no handler maybe description has not been passed
       if(!handler){
         handler = description;
-        description = '';
+        description = 'Not available';
       }
 
       assert(subject, 'subject is required when exposing a remote method');
@@ -272,64 +227,46 @@ const Paip = stampit({
       this.nats.expose(fullSubjectName, queue, description, function(originalRequest, replyTo){
 
         // we need to parse the request message into a Request Object
-        const request = Request({
-          nats: nats,
-          service: service,
-          message: originalRequest
-        });
+        const request = IncomingRequest({client: paip.service.name, request: originalRequest, paip});
 
-        // build the subject to follow **SERVICENAME**.**_LOG**.`subject`
+        // initialize a logger instance for current request call TODO is this slow ??
+        const log = Log().set({method: 'expose', request});
+
+        // build the subject where to publish service logs like **SERVICENAME**.**_LOG**.`subject`
         const logSubject = service.name + '._LOG.' + subject;
 
         return Promise.resolve(request)
           .then(handler)
           .then(responsePayload => {
-            const response = {
-              transactionId: request.transactionId,
-              statusCode: 200,
-              message: description,
-              payload: responsePayload
-            };
+
+            const response = SuccessResponse({request, message: description, payload: responsePayload });
+
             // publish reply
-            nats.publish(replyTo, response);
+            nats.publish(replyTo, response.serialize());
             // also publish the tuple request response for monitoring
 
-            log.debug({method:'expose', response});
-            log.info({
-              method:'expose',
-              service:request.service,
-              subject:request.subject,
-              statusCode:response.statusCode,
-              transactionId:request.transactionId,
-              msg:response.message});
-              // we should use the original request we got from the wire and not the one we recreated locally as that ones contains methods as well
-            nats.publish(logSubject, {request:originalRequest, response});
+            log.set({response}).info();
+
+            // also publish the tuple request response for monitoring
+            nats.publish(logSubject, {request: request.serialize(), response: response.serialize()});
           })
           .catch(err => {
             // handler threw an error we need to wrap it around a response message
-            const response = {
-              transactionId: request.transactionId,
-              statusCode: err.statusCode || 500,
-              message: err.message,
-              payload: Errio.stringify(err)
-            };
-            nats.publish(replyTo, response);
-            log.error({
-              method:'expose',
-              service:request.service,
-              subject:request.subject,
-              statusCode:response.statusCode,
-              transactionId:request.transactionId,
-              msg:response.message});
-            log.debug({method:'expose', response});
-            nats.publish(logSubject, {request:originalRequest, response});
+
+            const response = ErrorResponse({request, error: err});
+
+            nats.publish(replyTo, response.serialize());
+
+            log.error(response);
+
+            nats.publish(logSubject, {request: request.serialize(), response: response.serialize()});
           })
       });
 
-      log.info({info: 'Exposed method on NATS', subject, queue, description})
+      Log().set({method: 'expose', info: 'Exposed method on NATS', subject, queue, description}).info();
     },
     observe(subject, handler){
-      const log = this.log;
+      const Log = this.Log;
 
       assert(subject, 'subject is required when observing...');
       assert(typeof handler === 'function', 'handler is required and should be a function');
@@ -337,14 +274,14 @@ const Paip = stampit({
       const queue = this.service.id;
       this.nats.subscribe(subject, queue, function(message){
 
-        log.info({method: 'observe', subject});
-        log.debug({method: 'observe', subject, message});
+        Log().set({method: 'observe', message, subject});
 
         Promise.resolve(message)
           .then(handler)
-          .catch(err => log.error({method: 'observe', err}))
+          .catch(err => Log().set({method: 'observe', message, subject}).error(err))
       });
-      log.info({info: 'observing NATS subject', subject, queue})
+
+      Log().set({method: 'observe', info: 'observing NATS subject', subject, queue}).info();
     },
     close(){
       return new Promise((resolve, reject)=> {
@@ -354,8 +291,330 @@ const Paip = stampit({
           resolve();
         });
       });
-    }
+    },
   }
 }).compose(Privatize);
+
+const Request = stampit({
+  initializers: [
+    function({client, subject, args, transactionId}){
+
+      if (args) this.args = args;
+      if (subject) this.subject = subject;
+      if (client) this.client = client;
+      if (transactionId) this.client = transactionId;
+
+      assert(this.client, 'client must exists in Request object');
+      assert(this.subject, 'subject must exists in Request object');
+      assert(this.args, 'args must exists in Request object');
+
+      if (!this.transactionId)
+        this.transactionId = uuidv4();
+      }
+  ],
+  methods: {
+    getArgs(){ return this.args},
+    getTransactionId(){ return this.transactionId},
+    getSubject(){ return this.subject},
+    serialize(){
+      return {
+        client: this.client,
+        transactionId: this.transactionId,
+        subject: this.subject,
+        args: this.args
+      }
+    }
+  }
+})
+  .compose(InstanceOf)
+
+const IncomingRequest = stampit({
+  initializers: [
+    function({request, paip}){
+
+      if (request && request.args) this.args = request.args;
+      if (request && request.subject) this.subject = request.subject;
+      if (request && request.transactionId) this.transactionId = request.transactionId;
+      if (paip) this.paip = paip;
+
+      assert(this.paip, 'paip client must exists in Incoming Request object');
+    }
+  ],
+
+  methods:{
+    invoke(subject, args){
+
+      const request = Request({client: this.client, subject, args, transactionId: this.transactionId});
+
+      return paip.invoke(request)
+    },
+    broadcast(subject, message){
+
+      const broadcastMessage = BroadcastMessage({client: this.client, subject, message, transactionId: this.transactionId});
+
+      return paip.broadcast(broadcastMessage)
+    }
+  }
+})
+  .compose(Request);
+
+const BroadcastMessage = stampit({
+  initializers: [
+    function({subject, message, transactionId}){
+
+      if (subject) this.subject = subject;
+      if (message) this.message = message;
+      if (transactionId) this.transactionId = transactionId;
+
+      assert(this.subject, 'subject must exists in Broadcast Message');
+      assert(this.message, 'message must exists in Broadcast Message');
+
+      if (!this.transactionId)
+        this.transactionId = uuidv4();
+    }
+  ],
+});
+
+const Response = stampit({
+  initializers: [
+    // this is used to build a response
+    function({request, message, payload}){
+
+      if (request) this.transactionId = request.getTransactionId();
+      if (message) this.message = message;
+      if (payload) this.payload = payload;
+    }
+  ],
+  methods: {
+    getStatusCode(){ return this.statusCode},
+    getTransactionId(){ return this.transactionId},
+    getMessage(){ return this.message},
+    getPayload(){ return this.payload},
+    serialize(){
+      return {
+        transactionId: this.transactionId,
+        message: this.message,
+        payload: this.payload,
+        statusCode:this.statusCode
+      }
+    }
+  }
+})
+  .compose(InstanceOf)
+
+const IncomingResponse = stampit({
+  initializers: [
+    // this is used to build a Response object
+    function({response}){
+      if (response) {
+        Object.keys(response).map(n => this[n] = response[n]);
+      }
+    }
+  ],
+})
+  .compose(Response);
+
+const ErrorResponse = stampit({
+  initializers: [
+    function({error}){
+      if (error && error.statusCode)
+        this.statusCode = error.statusCode;
+      else this.statusCode = 500;
+      if (error && error.message)
+        this.message = error.message;
+      if (error) this.payload =  Errio.stringify(error)
+    }
+  ],
+})
+  .compose(Response);
+
+const SuccessResponse = stampit({
+  initializers: [
+    function(){
+      this.statusCode = 200;
+    }
+  ],
+})
+  .compose(Response);
+
+// :: Request, Response, error
+const RequestStatus = stampit({
+  initializers:[
+    function({request, response, error}){
+      if (request) {
+        this.subject = request.getSubject();
+        this.transactionId=  request.getTransactionId();
+      }
+      if (response){
+        this.statusCode=  response.getStatusCode();
+        this.message=  response.getMessage();
+      }
+      if (error){
+        this.error = error;
+      }
+    }
+  ]
+});
+
+const Logger = stampit({
+  initializers: [
+    function (opts, { stamp }) {
+      const configuration = stamp.compose.configuration;
+
+      // make sure we create the _payload at every initialization
+      this._payload= {};
+      // inject the stamp configuration into the object
+      this._payload.client = configuration.client;
+      this.logLevel = configuration.logLevel;
+    },
+    function() {
+      if (this.logLevel === 'off'){
+        this.info = ()=>{};
+        this.error = ()=>{};
+        this.warn = ()=>{};
+      }
+    }
+  ],
+  methods:{
+    info(){
+      this._payload.time = new Date();
+      // info level
+      this._payload.level = 30;
+      // TODO should we check for other kind of response ?
+      if (this._payload.response instanceof IncomingResponse && this._payload.request instanceof Request){
+        // this is a request - response log entry type
+        if (this.logLevel >= 30){
+          // log only the final request status
+          const status = RequestStatus({request: this._payload.request, response: this._payload.response});
+
+          Object.keys(status).map(n => this._payload[n] = status[n]);
+
+          // delete response and request
+          delete this._payload.response;
+          delete this._payload.request
+        }
+        else {
+          // serialize request and response object
+          this._payload.request = this._payload.request.serialize();
+          this._payload.response = this._payload.response.serialize();
+        }
+
+      }
+      // TODO modify Broadcast message check
+      else if (this.logLevel >= 30 && this._payload.broadcastMessage ){
+
+        // build status
+        const status = {
+          subject: this._payload.broadcastMessage.subject,
+          transactionId: this._payload.broadcastMessage.transactionId
+        };
+
+        Object.keys(status).map(n => this._payload[n] = status[n]);
+
+        // delete the full broadcastMessage
+        delete this._payload.broadcastMessage;
+
+      }
+
+      console.log(JSON.stringify(this._payload))
+    },
+    warn(error){
+      this._payload.time = new Date();
+      // info level
+      this._payload.level = 40;
+      if (this._payload.request instanceof Request){
+        // this is a request - response log entry type
+        if (this.logLevel >= 30){
+          // log only the final request status
+          const status = RequestStatus({request: this._payload.request, error});
+
+          // spread status object props on this
+          Object.keys(status).map(n => this._payload[n] = status[n]);
+
+          // delete response and request
+          delete this._payload.request
+        }
+        else {
+          // serialize request and response object
+          this._payload.request = this._payload.request.serialize();
+        }
+      }
+      // TODO broadcast message
+      else if (this.logLevel >= 30 && this._payload.broadcastMessage ){
+
+        // build status
+        const status = {
+          subject: this._payload.broadcastMessage.subject,
+          transactionId: this._payload.broadcastMessage.transactionId,
+          error: error
+        };
+
+        Object.keys(status).map(n => this._payload[n] = status[n]);
+
+        // delete the full broadcastMessage
+        delete this._payload.broadcastMessage;
+
+      }
+      else {
+        // any other case just set the error object in the payload
+        this._payload.error = error;
+      }
+
+      console.log(JSON.stringify(this._payload))
+    },
+    error(error){
+      this._payload.time = new Date();
+      // info level
+      this._payload.level = 50;
+      if (this._payload.request instanceof Request && error instanceof ErrorResponse) {
+        // this is a request - response log entry type
+        if(this.logLevel >= 30){
+          // build status
+          const status = RequestStatus({request: this._payload.request, response: error, error});
+
+          // spread status object props on this
+          Object.keys(status).map(n => this._payload[n] = status[n]);
+
+          // delete request
+          delete this._payload.request
+        }
+        else{
+          // serialize request and response object
+          this._payload.request = this._payload.request.serialize();
+        }
+
+      }
+      else if (this.logLevel >= 30 && this._payload.broadcastMessage ){
+
+        // build status
+        const status = {
+          subject: this._payload.broadcastMessage.subject,
+          transactionId: this._payload.broadcastMessage.transactionId,
+          error: error
+        };
+
+        Object.keys(status).map(n => this._payload[n] = status[n]);
+
+        // delete the full broadcastMessage
+        delete this._payload.broadcastMessage;
+      }
+      else {
+        // any other case just set the error object in the payload
+        this._payload.error = error;
+      }
+
+      console.log(JSON.stringify(this._payload))
+    },
+    set(props){
+      // stamp this object with each property of props
+      Object.keys(props).map(n => this._payload[n] = props[n]);
+      return this;
+    }
+  },
+  conf:{
+    // 20 === debug, 30 === info , 40 === warn, 50 === error
+    logLevel: 30
+  }
+});
 
 module.exports = Paip;
