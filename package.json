@@ -4,7 +4,7 @@
   "description": "Light Framework built around NATS",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "lab --assert code --coverage"
   },
   "author": "davide talesco",
   "license": "ISC",

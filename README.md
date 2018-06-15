@@ -98,12 +98,12 @@ the remote method threw any error or if there was any error sending /receiving t
 ## BROADCAST
 A service can publish a message without expecting any reply:
 
-`paip.broadcast(subject, message)`
+`paip.broadcast(subject, payload)`
 
 Argument | Required | Description
 -------- | -------- | -----------
 `subject` | string | **true** | this is the subject where to publish the message
-`message` | **true** | this is the `broadcast message` to be sent
+`payload` | **true** | this is the payload of the message to be sent
 
 The function returns a Promise that resolves with no result or reject if any error publishing the message;
 
@@ -132,7 +132,7 @@ Property Name | Type | Required | Description
 Property Name | Type | Required | Description
 -------- | -------- | ----------- | ------- |
 `statusCode` | number | **true** | this is the statusCode of the request
-`payload` | object | **false** | this is the optional data of the response
+`payload` | object | **false** | this is the optional data of the response , if the request failed this is the error object
 `message` | string | **false** | this is an optional message the server can add
 `transactionId` | string | **false** | this is the transactionId of the request
 

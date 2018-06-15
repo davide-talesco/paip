@@ -3,6 +3,7 @@ const uuidv4 = require('uuid/v4');
 const stampit = require('@stamp/it');
 const InstanceOf = require('@stamp/instanceof');
 const Privatize = require('@stamp/privatize');
+const R = require('ramda');
 const Errio = require('errio');
 const assert = require('assert');
 Errio.setDefaults({stack:true});
@@ -68,7 +69,7 @@ const Nats = stampit({
     publish(subject, message){
       return new Promise((resolve, reject) => {
         this.connection.publish(subject, message, () => {
-          resolve(message);
+          resolve();
         });
       });
     },
@@ -166,36 +167,35 @@ const Paip = stampit({
         })
         .catch(err => {
           // set the error and log the content of log
+          //const error = ErrorResponse({error: err});
           log.error(err);
           throw err
         });
     },
-    broadcast(subject, message) {
+    broadcast(subject, payload) {
 
       const log = this.Log().set({method: 'broadcast'});
 
-      var broadcastMessage;
+      var message;
 
       // if subject is already a BroadcastMessage it means broadcast has been called from within expose
       if (subject instanceof BroadcastMessage){
-        broadcastMessage = subject;
+        message = subject;
       }
       else{
         try{
-          broadcastMessage = BroadcastMessage(subject, message);
+          message = BroadcastMessage({subject, payload});
         }
         catch(e){
           return Promise.reject(e)
         }
       }
 
-      log.set({broadcastMessage});
+      log.set({message});
 
-      return this.nats.publish(subject, broadcastMessage)
-        .then(response => {
+      return this.nats.publish(subject, message)
+        .then(() => {
           log.info();
-
-          return response.payload;
         })
         .catch(err => {
           // set the error and log the content of log
@@ -263,15 +263,15 @@ const Paip = stampit({
           })
       });
 
-      Log().set({method: 'expose', info: 'Exposed method on NATS', subject, queue, description}).info();
+      Log().set({info: 'Exposed method on NATS', subject, queue, description}).info();
     },
     observe(subject, handler){
       const Log = this.Log;
 
-      assert(subject, 'subject is required when observing...');
+      assert(subject, 'subject is required when observing');
       assert(typeof handler === 'function', 'handler is required and should be a function');
 
-      const queue = this.service.id;
+      const queue = this.service.name;
       this.nats.subscribe(subject, queue, function(message){
 
         Log().set({method: 'observe', message, subject});
@@ -281,7 +281,7 @@ const Paip = stampit({
           .catch(err => Log().set({method: 'observe', message, subject}).error(err))
       });
 
-      Log().set({method: 'observe', info: 'observing NATS subject', subject, queue}).info();
+      Log().set({info: 'observing NATS subject', subject, queue}).info();
     },
     close(){
       return new Promise((resolve, reject)=> {
@@ -293,7 +293,8 @@ const Paip = stampit({
       });
     },
   }
-}).compose(Privatize);
+})
+  .compose(Privatize);
 
 const Request = stampit({
   initializers: [
@@ -360,14 +361,14 @@ const IncomingRequest = stampit({
 
 const BroadcastMessage = stampit({
   initializers: [
-    function({subject, message, transactionId}){
+    function({subject, payload, transactionId}){
 
       if (subject) this.subject = subject;
-      if (message) this.message = message;
+      if (payload) this.payload = payload;
       if (transactionId) this.transactionId = transactionId;
 
       assert(this.subject, 'subject must exists in Broadcast Message');
-      assert(this.message, 'message must exists in Broadcast Message');
+      assert(this.payload, 'payload must exists in Broadcast Message');
 
       if (!this.transactionId)
         this.transactionId = uuidv4();
@@ -422,7 +423,7 @@ const ErrorResponse = stampit({
       else this.statusCode = 500;
       if (error && error.message)
         this.message = error.message;
-      if (error) this.payload =  Errio.stringify(error)
+      if (error) this.payload =  JSON.parse(Errio.stringify(error))
     }
   ],
 })
@@ -456,6 +457,7 @@ const RequestStatus = stampit({
   ]
 });
 
+// TODO log is not printing client name
 const Logger = stampit({
   initializers: [
     function (opts, { stamp }) {
@@ -480,8 +482,7 @@ const Logger = stampit({
       this._payload.time = new Date();
       // info level
       this._payload.level = 30;
-      // TODO should we check for other kind of response ?
-      if (this._payload.response instanceof IncomingResponse && this._payload.request instanceof Request){
+      if (this._payload.method === 'expose' || this._payload.method === 'invoke'){
         // this is a request - response log entry type
         if (this.logLevel >= 30){
           // log only the final request status
@@ -500,65 +501,21 @@ const Logger = stampit({
         }
 
       }
-      // TODO modify Broadcast message check
-      else if (this.logLevel >= 30 && this._payload.broadcastMessage ){
-
-        // build status
-        const status = {
-          subject: this._payload.broadcastMessage.subject,
-          transactionId: this._payload.broadcastMessage.transactionId
-        };
-
-        Object.keys(status).map(n => this._payload[n] = status[n]);
-
-        // delete the full broadcastMessage
-        delete this._payload.broadcastMessage;
-
+      else if (this.logLevel >= 30 && this._payload.method === 'broadcast' ){
+        // remove message payload
+        this._payload.message = R.omit(['payload'], this._payload.message);
       }
-
+      else if (this.logLevel >= 30 && this._payload.method === 'broadcast' ){
+        // remove message
+        delete this._payload.message;
+      }
       console.log(JSON.stringify(this._payload))
     },
     warn(error){
       this._payload.time = new Date();
       // info level
       this._payload.level = 40;
-      if (this._payload.request instanceof Request){
-        // this is a request - response log entry type
-        if (this.logLevel >= 30){
-          // log only the final request status
-          const status = RequestStatus({request: this._payload.request, error});
-
-          // spread status object props on this
-          Object.keys(status).map(n => this._payload[n] = status[n]);
-
-          // delete response and request
-          delete this._payload.request
-        }
-        else {
-          // serialize request and response object
-          this._payload.request = this._payload.request.serialize();
-        }
-      }
-      // TODO broadcast message
-      else if (this.logLevel >= 30 && this._payload.broadcastMessage ){
-
-        // build status
-        const status = {
-          subject: this._payload.broadcastMessage.subject,
-          transactionId: this._payload.broadcastMessage.transactionId,
-          error: error
-        };
-
-        Object.keys(status).map(n => this._payload[n] = status[n]);
-
-        // delete the full broadcastMessage
-        delete this._payload.broadcastMessage;
-
-      }
-      else {
-        // any other case just set the error object in the payload
-        this._payload.error = error;
-      }
+      this._payload.error = error;
 
       console.log(JSON.stringify(this._payload))
     },
@@ -566,7 +523,7 @@ const Logger = stampit({
       this._payload.time = new Date();
       // info level
       this._payload.level = 50;
-      if (this._payload.request instanceof Request && error instanceof ErrorResponse) {
+      if (this._payload.method === 'expose' || this._payload.method === 'invoke') {
         // this is a request - response log entry type
         if(this.logLevel >= 30){
           // build status
