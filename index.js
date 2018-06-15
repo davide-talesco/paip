@@ -10,8 +10,8 @@ Errio.setDefaults({stack:true});
 
 const Nats = stampit({
   initializers: [
-    function ({nats, timeout, Log}){
-      if (nats) this.options = nats;
+    function ({options, timeout, Log}){
+      if (options) this.options = R.mergeDeepLeft(this.options, options);
       if (timeout) this.timeout = timeout;
       if (Log) this.Log = Log;
   }],
@@ -121,13 +121,14 @@ const Paip = stampit({
      instance.service = Service({name, namespace});
   },
     ({logLevel}, { instance }) => {
-      instance.Log = Logger.conf({client: instance.service.name});
+      const conf = {client: instance.service.name}
       if (logLevel){
-        instance.Log = Logger.conf({logLevel});
+        conf.logLevel= logLevel;
       }
+      instance.Log = Logger.conf(conf);
   },
     ({nats, timeout}, { instance }) => {
-      instance.nats = Nats({nats, timeout, Log:instance.Log});
+      instance.nats = Nats({options: nats, timeout, Log:instance.Log});
       // connect to NATS
       instance.nats.connect();
   }],
@@ -192,6 +193,8 @@ const Paip = stampit({
       }
 
       log.set({message});
+
+      // run this at next tick
 
       return this.nats.publish(subject, message)
         .then(() => {

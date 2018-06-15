@@ -78,28 +78,11 @@ experiment('invoke api,', () => {
   });
 });
 
+// TODO solve problems in crap/crap.js
 experiment('broadcast api', () => {
   const server = Paip({name:'server', logLevel:'off'});
   const client = Paip({name:'client', logLevel:'off'});
   const client2 = Paip({name:'client2', logLevel:'off'});
-
-  lab.before(() => {
-
-    server.expose('add', 'this is a test remote function', function(r){
-      const [x, y] = r.getArgs();
-      return x + y;
-    });
-
-    server.expose('throwSync', 'this function throw an error synchronously', function(r){
-      throw new Error('SyncError')
-    });
-
-    server.expose('throwAsync', 'this function throws an error asynchronously', function(r){
-      return new Promise((_,r) =>r(new Error('AsyncError')));
-    });
-
-    return new Promise((resolve)=>setTimeout(resolve, 100))
-  });
 
   lab.after(()=>{
     client.close();
@@ -108,21 +91,22 @@ experiment('broadcast api', () => {
   });
 
   test('send a broadcast message', async()=>{
-    const msg1 = new Promise((resolve,_)=>{
+    const msg1 = new Promise((resolve)=>{
       client.observe('greetings', msg => {
         expect(msg.payload).to.be.equal('ciao');
         resolve()
       });
     });
 
-    const msg2 = new Promise((resolve,_)=>{
+    const msg2 = new Promise((resolve)=>{
       client2.observe('greetings', msg => {
         expect(msg.payload).to.be.equal('ciao');
         resolve()
       });
     });
+    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick works!) check crap/broadcast-observe-race-condition.js
+    setTimeout(()=> server.broadcast('greetings', 'ciao'), 100);
 
-    server.broadcast('greetings', 'ciao');
     return Promise.all([msg1, msg2])
   });
 });
