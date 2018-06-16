@@ -8,6 +8,12 @@ const Errio = require('errio');
 const assert = require('assert');
 Errio.setDefaults({stack:true});
 
+const logLevelNameMap = {
+  off: 0,
+  info: 30,
+  debug: 50
+};
+
 const Nats = stampit({
   initializers: [
     function ({options, timeout, Log}){
@@ -121,9 +127,10 @@ const Paip = stampit({
      instance.service = Service({name, namespace});
   },
     ({logLevel}, { instance }) => {
-      const conf = {client: instance.service.name}
+      const conf = {client: instance.service.name};
       if (logLevel){
-        conf.logLevel= logLevel;
+        assert(['off', 'info', 'debug'].includes(logLevel), 'logLevel must be one of off | info | debug');
+        conf.logLevel= logLevelNameMap[logLevel];
       }
       instance.Log = Logger.conf(conf);
   },

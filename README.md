@@ -22,7 +22,7 @@ Property Name | Type | Required |  Default | Description
 `namespace` | string | **false** | '' | this is the base name space for the service
 `nats` | object | **false** | {} | this is the node-nats client connect option object https://github.com/nats-io/node-nats
 `timeout` | number | **false** | 5000 | this is the milliseconds paip wait before declaring a request timed out
-`logLevel` | string | **false** | info | this is the error level passed to bunyan logger instance. check bunyan for supported error levels it also supports `off` to completely disable logging
+`logLevel` | string | **false** | info | valid values are off, info, debug
 
 ## NATS Socket Connection Reference (for connection error handling)
 

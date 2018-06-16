@@ -104,7 +104,7 @@ experiment('broadcast api', () => {
         resolve()
       });
     });
-    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick works!) check crap/broadcast-observe-race-condition.js
+    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick doesn't work!) check crap/broadcast-observe-race-condition.js
     setTimeout(()=> server.broadcast('greetings', 'ciao'), 100);
 
     return Promise.all([msg1, msg2])
