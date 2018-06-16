@@ -173,3 +173,34 @@ client.invoke('add', 3, 4)
   .then(console.log)
   .catch(console.error)
 ```
+
+# what is a request Object
+
+For the Application Business code
+A function name (the nats subject) and a list of arguments
+ 
+For paip
+The name of the 'Application Business code' the nats subject and the list of arguments
+
+for nats
+A subject and a message
+
+Outgoing request flow (service client)
+- Application Business code send the request ({name: 'add', args:[3,5]})
+- Paip build a paipRequest object {service: 'client', subject:'add', args:[3,5], time: Date, tx: 1234} and publish it to subject
+
+Incoming request flow (service math)
+- Paip receives the paipRequest along with replyTo subject
+- Paip builds an IncomingPaipRequest object {paip: paipInstance, request: {service: 'client', subject:'add', args:[3,5], time: Date, tx:1234}, getArgs:()=>{}, invoke:()=>{}} and pass it to Application Code
+- application code can call .invoke method and the paipRequest sent should keep the same tx property as the incoming request so we can track the transaction 
+- if any error Paip build a ErrorPaipResponse {service:'math', request.subject, request.tx:1234, time, error, statusCode, getResult:()=>{}} and publish it back to replyTo
+
+Outgoing Response (service math)
+- Application code return a result (or throw an error)
+- Paip build a paipResponse {service:'math', subject, tx:1234, time, result, statusCode} and publish it on replyTo
+- if any error Paip build a ErrorPaipResponse {service:'math', request.subject, tx:1234, time, error, statusCode, getResult:()=>{}} and publish it to replyTo
+
+Incoming response (service client)
+- Paip receive the paipResponse or a NATS error
+- if NATS error Paip build a ErrorPaipResponse {service:'client', subject, tx:1234, time, error, statusCode, getResult()=>{}}
+- Paip return to the application code getResult() which return the content of result if exists or throws error. 

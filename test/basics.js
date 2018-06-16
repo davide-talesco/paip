@@ -4,7 +4,7 @@
  */
 
 'use strict';
-const Paip = require('../index');
+const Paip = require('../index2');
 const Lab = require('lab');
 const { expect } = require('code');
 
@@ -21,16 +21,16 @@ experiment('invoke api,', () => {
 
   lab.before(() => {
 
-    server.expose('add', 'this is a test remote function', function(r){
+    server.expose('add', function(r){
       const [x, y] = r.getArgs();
       return x + y;
     });
 
-    server.expose('throwSync', 'this function throw an error synchronously', function(r){
+    server.expose('throwSync', function(r){
       throw new Error('SyncError')
     });
 
-    server.expose('throwAsync', 'this function throws an error asynchronously', function(r){
+    server.expose('throwAsync', function(r){
       return new Promise((_,r) =>r(new Error('AsyncError')));
     });
 
