@@ -8,48 +8,50 @@ const Errio = require('errio');
 const assert = require('assert');
 Errio.setDefaults({stack:true});
 
-const logLevelNameMap = {
-  off: 0,
+const LOG_LEVEL_MAP = {
+  off: 60,
+  error: 50,
+  warn: 40,
   info: 30,
-  debug: 50
+  debug: 20
 };
 
 const Nats = stampit({
   initializers: [
-    function ({options, timeout, Log}){
+    function ({options, timeout, logger}){
       if (options) this.options = R.mergeDeepLeft(this.options, options);
       if (timeout) this.timeout = timeout;
-      if (Log) this.Log = Log;
+      if (logger) this.logger = logger;
   }],
   methods: {
     connect() {
       // create a new logger instance
-      const log = this.Log().set({component: 'nats'});
+      const log = this.logger.child().set({component: 'nats', api: 'connect'});
 
       this.connection = NATS.connect(this.options);
 
       this.connection.on('error', function(err) {
-        log.set({message: 'Nats Connection Error'}).error(err);
+        log.child().set({message: 'Nats Connection Error'}).error(err);
       });
 
       this.connection.on('connect', function(nc) {
-        log.set({message: 'connected to Nats'}).info();
+        log.child().set({message: 'connected to Nats'}).info();
       });
 
       this.connection.on('disconnect', function() {
-        log.set({message: 'disconnected from Nats'}).info();
+        log.child().set({message: 'disconnected from Nats'}).warn();
       });
 
       this.connection.on('reconnecting', function() {
-        log.set({message: 'reconnecting to Nats'}).info();
+        log.child().set({message: 'reconnecting to Nats'}).info();
       });
 
       this.connection.on('reconnect', function(nc) {
-        log.set({message: 'reconnected to Nats'}).info();
+        log.child().set({message: 'reconnected to Nats'}).info();
       });
 
       this.connection.on('close', function() {
-        log.set({message: 'closed Nats connection'}).info();
+        log.child().set({message: 'closed Nats connection'}).warn();
       });
     },
     invoke(subject, request){
@@ -70,12 +72,14 @@ const Nats = stampit({
     expose (subject, queue, handler){
       // make sure they are available in callbacks
       const nats = this.connection;
-      const log = this.Log().set({component: 'nats'});
+      // create a new logger instance
+      const log = this.logger.child().set({component: 'nats', api: 'expose'});
 
       nats.subscribe(subject, {queue}, function(request, replyTo) {
 
         // if no replyTo? ie. a broadcast message on this subject? simply discard the request
         if (!replyTo){
+          // we can reuse the same logger child instance
           log.set({message:'request is missing replyTo subject', request}).warn();
           return
         }
@@ -100,31 +104,35 @@ const Nats = stampit({
 
 const Service = stampit({
   initializers: [
-    function({namespace, name}){
+    function({namespace, name, logLevel}){
       assert(name, 'name is required to initialize Paip service');
+
+      if (logLevel){
+        assert(Object.keys(LOG_LEVEL_MAP).includes(logLevel), 'logLevel must be one of LOG_LEVEL_MAP');
+        this.logLevel= LOG_LEVEL_MAP[logLevel];
+      }
+
       // build the full service
       this.name = name;
       this.namespace = namespace;
-      this.fullName = this.namespace ? this.namespace + '.' + this.name : this.name
+      this.fullName = this.namespace ? this.namespace + '.' + this.name : this.name;
+
+      // Initialize the root logger
+      this.logger = Logger({service: this.fullName, logLevel: this.logLevel});
     }
-  ]
+  ],
+  props:{
+    logLevel : 30
+  }
 });
 
 const Paip = stampit({
   initializers: [
-    ({name, namespace}, { instance }) => {
-     instance.service = Service({name, namespace});
-  },
-    ({logLevel}, { instance }) => {
-      const conf = {client: instance.service.name};
-      if (logLevel){
-        assert(['off', 'info', 'debug'].includes(logLevel), 'logLevel must be one of off | info | debug');
-        conf.logLevel= logLevelNameMap[logLevel];
-      }
-      instance.Log = Logger.conf(conf);
-  },
+    ({name, namespace, logLevel}, { instance }) => {
+     instance.service = Service({name, namespace, logLevel});
+    },
     ({nats, timeout}, { instance }) => {
-      instance.nats = Nats({options: nats, timeout, Log:instance.Log});
+      instance.nats = Nats({options: nats, timeout, logger:instance.service.logger});
       // connect to NATS
       instance.nats.connect();
   }],
@@ -134,6 +142,8 @@ const Paip = stampit({
     },
     invoke(subject, ...args) {
       const paip = this;
+      // create a new logger instance
+      const logger = this.service.logger.child().set({component: 'paip', api: 'invoke'});
 
       // build the subject where to publish service logs like **SERVICENAME**.**_LOG**.`subject`
       const logSubject = paip.service.name + '._LOG.' + subject;
@@ -167,6 +177,23 @@ const Paip = stampit({
               return ErrorResponse({service: paip.service.name, request, error:err});
             })
             .then(paipResponse => {
+
+              if ((/^2/.test('' + paipResponse.getStatusCode()))) {
+                // Status Codes equal 2xx
+                logger.child().set(RequestStatus({request, response: paipResponse})).info();
+              }
+              else if ((/^4/.test('' + paipResponse.getStatusCode()))) {
+                // Status Codes equal 4xx
+                logger.child().set(RequestStatus({request, response: paipResponse})).warn();
+              }
+              else if ((/^5/.test('' + paipResponse.getStatusCode()))) {
+                // Status Codes equal 5xx
+                logger.child().set(RequestStatus({request, response: paipResponse})).error();
+              }
+
+              // always log the full request - response couple
+              logger.child().set({request, response: paipResponse}).debug();
+
               return paipResponse.getResult()
             })
         })
@@ -174,6 +201,8 @@ const Paip = stampit({
     expose(subject, appHandler){
 
       const paip = this;
+
+      const logger = this.service.logger.child().set({component: 'paip', api: 'expose'});
 
       assert(subject, 'subject is required when exposing a remote method');
       assert(typeof appHandler === 'function', 'appHandler is required and should be a function');
@@ -207,12 +236,31 @@ const Paip = stampit({
               .then(response => {
                 paip.nats.publish(replyTo, response);
                 // also publish the tuple request response for monitoring
-                paip.nats.publish(logSubject, {request: request, response});
+                paip.nats.publish(logSubject, {request, response});
+
+                // also log it
+                if ((/^2/.test('' + response.getStatusCode()))) {
+                  // Status Codes equal 2xx
+                  logger.child().set({IncomingRequest: RequestStatus({request}), OutgoingResponse: ResponseStatus({response})}).info();
+                }
+                else if ((/^4/.test('' + response.getStatusCode()))) {
+                  // Status Codes equal 4xx
+                  logger.child().set({IncomingRequest: RequestStatus({request}), OutgoingResponse: ResponseStatus({response})}).warn();
+                }
+                else if ((/^5/.test('' + response.getStatusCode()))) {
+                  // Status Codes equal 5xx
+                  logger.child().set({IncomingRequest: RequestStatus({request}), OutgoingResponse: ResponseStatus({response})}).error();
+                }
+                // always log the full request - response couple in debug
+                logger.child().set({request, response}).debug();
+
               })
               // TODO this should never happen! but should we log it ?
               .catch(()=>{})
           })
       });
+
+      logger.child().set({message: 'Exposed local method', subject}).info();
     },
     broadcast(subject, payload){
       const paip = this;
@@ -265,6 +313,7 @@ const BroadcastMessage = stampit({
 
       if (!this.transactionId)
         this.transactionId = uuidv4();
+      this.time = new Date();
     }
   ],
 });
@@ -292,6 +341,28 @@ const IncomingRequest = stampit({
       return paip.invoke(request)
     },
   }
+});
+
+const RequestStatus = stampit({
+  initializers: [
+    function({request}){
+      this.service= request.service;
+      this.subject= request.subject;
+      this.tx = request.tx;
+    }
+  ]
+});
+
+const ResponseStatus = stampit({
+  initializers: [
+    function({response}){
+      this.service= response.service;
+      this.statusCode = response.statusCode;
+      if (response.error){
+        this.error = response.error;
+      }
+    }
+  ]
 });
 
 const Request = stampit({
@@ -341,6 +412,9 @@ const Response = stampit({
         throw Errio.fromObject(this.error);
 
       return this.result;
+    },
+    getStatusCode(){
+      return this.statusCode;
     }
   }
 });
@@ -391,7 +465,7 @@ const Logger = stampit({
   initializers:[
     function({service, logLevel}){
       // initialize options and payload
-      this.options = {};
+      //this.options = {};
       this._payload = {};
 
       if (service){
@@ -411,9 +485,27 @@ const Logger = stampit({
       childLogger.set(this._payload);
       return childLogger;
     },
+    debug(){
+      this._payload.level = 20;
+      if (this.options.logLevel <= this._payload.level)
+        console.log(JSON.stringify(this._payload))
+    },
     info(){
       this._payload.level = 30;
-      console.log(JSON.stringify(this._payload))
+      if (this.options.logLevel <= this._payload.level)
+        console.log(JSON.stringify(this._payload))
+    },
+    warn(){
+      this._payload.level = 40;
+      if (this.options.logLevel <= this._payload.level)
+        console.log(JSON.stringify(this._payload))
+    },
+    error(err){
+      this._payload.level = 50;
+      if (err)
+        this._payload.error = err;
+      if (this.options.logLevel <= this._payload.level)
+        console.log(JSON.stringify(this._payload))
     },
     set(props){
       if (typeof props !== 'object')
@@ -422,9 +514,13 @@ const Logger = stampit({
       Object.keys(props).map(n => this._payload[n] = props[n]);
       return this;
     }
+  },
+  props: {
+    options: {
+      // 20 === debug, 30 === info , 40 === warn, 50 === error
+      logLevel: 30
+    }
   }
 });
 
 module.exports = Paip;
-
-

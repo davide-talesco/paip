@@ -1,7 +1,7 @@
 # PAIP
 
 **PAIP** (read pipe) is a lightweight microservice toolkit built around NATS and let `server services` **expose** local methods on NATS subjects
-so that `client services` can **invoke** them remotely. 
+so that `client services` can **invoke** them remotely.
 
 `paip services` can also **broadcast** `messages` and **observe** `messages`
 
@@ -39,30 +39,29 @@ This is how you get a reference to the Nats connection:
 
 With expose you can ... expose a function on a NATS subject:
 
-`paip.expose(subject, description, handler)`
+`paip.expose(subject, handler)`
 
 Argument | Required | Description
 -------- | -------- | -----------
 `subject` | **true** | this is the NATS subject where to expose the function
-`description` | **false** | this is the description of this remote method
 `handler` | **true** | this is the handler that will be called whenever paip receive a new `request message` on `subject`
 
-**paip** internally subscribes on `subject` and whenever a `request message` is received it invokes the `handler` with the message
-and wait a result. Check [request object api](#request-api) to understand how to interact with it.
+**paip** internally subscribes on `subject` and whenever a `IncomingRequest` is received it invokes the `handler` with the message
+and wait a result. Check [incoming request api](#incoming-request-api) to understand how to interact with it.
 
-It then wraps the result returned (or the error thrown) by the handler within a `response message`and publishes it back to the caller
-via the `request message` unique _INBOX subject. check official nats client documentation for more info on what _INBOX subject is.
+It then wraps the result returned (or the error thrown) by the handler within a `Response`and publishes it back to the caller
+via the `IncomingRequest` unique _INBOX reply To subject. check official nats client documentation for more info on what _INBOX subject is.
 
 The `handler` function should return a value, a promise or simply throw an error.
 
 For known error , the handler should provide a **statusCode** (http status codes) property. If the error has no statusCode 
 **paip** will set it to 500.
 
-If the handler function, to respond, needs to call another remote method it can use the `request message` *invoke* method
-so the new `request message` will maintain the same transactionId as the incoming request, and we can trace it.
+If the handler function, to respond, needs to call another remote method it can use the `IncomingRequest` *invoke* method
+so that every `Request` invoked in line will maintain the same transaction Id as the `IncomingRequest`, so can be traced.
 
-**pipe** for each received `request message`, after the `response message` has been published, publishes also a log message
- {`request`, `response`} under **[NAMESPACE.]SERVICE_NAME**.**_LOG**.`subject`
+The **expose** method, for each received `Request` - `Request` couple  publishes also a log message
+ {`Request`, `Request`} under **[NAMESPACE.]SERVICE_NAME**.**_LOG**.`subject`.
 
 **NOTE**
 The underlying NATS subscription has {'queue':**SERVICE_NAME**}. Multiple instances of the same service will load balance
@@ -111,32 +110,37 @@ The function returns a Promise that resolves with no result or reject if any err
 
 ## BROADCAST OBJECT
 
-Property Name | Type | Required | Description
--------- | -------- | ----------- | ------- |
-`subject` | object | **false** | this is the subject where to publish the request
-`service` | string | **false** | this is the name of the service making the request
-`transactionId` | string | **false** | this is the transactionId of the request
-`payload` | object | **false** | this is the payload of the message
+Property Name | Type  | Description
+-------- | -------- |  ------- |
+`subject` | string | this is the subject where to publish the request
+`service` | string |this is the name of the service making the request
+`tx` | string |this is the transaction Id of the request
+`time` | date | this is time the message was broadcasted
+`payload` | object | this is the payload of the message
 
 ## REQUEST OBJECT
 
-Property Name | Type | Required | Description
--------- | -------- | ----------- | ------- |
-`args` | number | **true** | this is the arguments to be passed to the remote method
-`subject` | object | **false** | this is the subject where to publish the request
-`service` | string | **false** | this is the name of the service making the request
-`transactionId` | string | **false** | this is the transactionId of the request
+Property Name | Type | Description
+-------- | -------- | ------- |
+`service` | string | this is the name of the service making the request
+`args` | array | this is the arguments to be passed to the remote method
+`subject` | string | this is the subject where to publish the request
+`tx` | string | this is the transaction Id of the request
+`time` | date | this is the time the request was made
 
 ## RESPONSE OBJECT
 
-Property Name | Type | Required | Description
--------- | -------- | ----------- | ------- |
-`statusCode` | number | **true** | this is the statusCode of the request
-`payload` | object | **false** | this is the optional data of the response , if the request failed this is the error object
-`message` | string | **false** | this is an optional message the server can add
-`transactionId` | string | **false** | this is the transactionId of the request
+Property Name | Type | Description
+-------- | -------- | ------- |
+`service` | string | this is the name of the service sending the response
+`subject` | string | this is the subject of the request this response belong go
+`tx` | string | this is the transaction Id of the request
+`time` | date | this is the time the response was sent
+`statusCode` | number | this is the statusCode of the response
+`result` | any | this is the optional result data of the response
+`error` | object | this is the optional error object only present if this is an error respone
 
-## REQUEST API
+## INCOMING REQUEST API
 
 The request object that **expose** handlers will receive has the following interfaces:
 
@@ -144,7 +148,7 @@ Property Name | Return Type |  Description
 -------- | -------- | ------- |
 `getArgs` | array  | this is the method to get the args of the request
 `invoke` | Promise(result)  | this is the method to make another request with the same transactionId of the incoming request
-`broadcast` | Promise()  | this is the method to send a broadcast message
+
 
 # USAGE
 
@@ -153,13 +157,13 @@ Expose a local method `add` remotely on subject `add`:
 ```javascript
 const Paip = require('paip');
 
-const server = Paip({name:'server'});
+const server = Paip({name:'math', logLevel:'debug'});
 
 function add(x, y){
   return x + y;
 }
 
-server.expose('add', 'add 2 numbers', r => add(...r.getArgs()));
+server.expose('add', req => add(...req.getArgs()));
 ```
 
 On a client call the remote method:
@@ -169,39 +173,42 @@ const Paip = require('paip');
 
 const client = Paip({name:'client'});
 
-client.invoke('add', 3, 4)
+client.invoke('math.add', 3, 4)
   .then(console.log)
   .catch(console.error)
+  .then(()=> client.close());
 ```
 
-# what is a request Object
+# Request - Response objects internals
+
+**What is a Request ?**
 
 For the Application Business code
-A function name (the nats subject) and a list of arguments
+`A function name (the nats subject) and a list of arguments`
  
 For paip
-The name of the 'Application Business code' the nats subject and the list of arguments
+`The name of the 'Application Business code' the nats subject and the list of arguments`
 
 for nats
-A subject and a message
+`A subject and a message`
 
 Outgoing request flow (service client)
-- Application Business code send the request ({name: 'add', args:[3,5]})
-- Paip build a paipRequest object {service: 'client', subject:'add', args:[3,5], time: Date, tx: 1234} and publish it to subject
+- Application Business code send the request ({subject: 'add', args:[3,5]})
+- Paip build a Request object {service: 'client', subject:'add', args:[3,5], time: Date, tx: 1234} and publish it to `subject`
 
 Incoming request flow (service math)
-- Paip receives the paipRequest along with replyTo subject
-- Paip builds an IncomingPaipRequest object {paip: paipInstance, request: {service: 'client', subject:'add', args:[3,5], time: Date, tx:1234}, getArgs:()=>{}, invoke:()=>{}} and pass it to Application Code
-- application code can call .invoke method and the paipRequest sent should keep the same tx property as the incoming request so we can track the transaction 
-- if any error Paip build a ErrorPaipResponse {service:'math', request.subject, request.tx:1234, time, error, statusCode, getResult:()=>{}} and publish it back to replyTo
+- Paip receives the Request along with replyTo subject
+- Paip builds an IncomingRequest object {paip: paipInstance, request: {service: 'client', subject:'add', args:[3,5], time: Date, tx:1234}, getArgs:()=>{}, invoke:()=>{}} and pass it to Application Code
+- application code can call .invoke method and the Request sent out will keep the same tx property as the IncomingRequest so we can track the transaction. simple.
+- if any error Paip build a ErrorResponse {service:'math', request.subject, request.tx:1234, time, error, statusCode, getResult:()=>{}} and publish it back to replyTo
 
 Outgoing Response (service math)
 - Application code return a result (or throw an error)
-- Paip build a paipResponse {service:'math', subject, tx:1234, time, result, statusCode} and publish it on replyTo
-- if any error Paip build a ErrorPaipResponse {service:'math', request.subject, tx:1234, time, error, statusCode, getResult:()=>{}} and publish it to replyTo
+- Paip build a OutgoingResponse {service:'math', subject, tx:1234, time, result, statusCode} and publish it on replyTo
+- if any error Paip build a ErrorResponse {service:'math', request.subject, tx:1234, time, error, statusCode, getResult:()=>{}} and publish it to replyTo
 
 Incoming response (service client)
-- Paip receive the serialized paipResponse or a NATS error
-- Paip build a response object out of the paipResponse
-- if NATS error Paip build a ErrorPaipResponse {service:'client', subject, tx:1234, time, error, statusCode, getResult()=>{}}
+- Paip receive the serialized Response or a NATS error
+- Paip build a IncomingResponse object out of the Response
+- if NATS error Paip build a ErrorResponse {service:'client', subject, tx:1234, time, error, statusCode, getResult()=>{}}
 - Paip return to the application code getResult() which return the content of result if exists or throws error. 
