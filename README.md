@@ -201,6 +201,7 @@ Outgoing Response (service math)
 - if any error Paip build a ErrorPaipResponse {service:'math', request.subject, tx:1234, time, error, statusCode, getResult:()=>{}} and publish it to replyTo
 
 Incoming response (service client)
-- Paip receive the paipResponse or a NATS error
+- Paip receive the serialized paipResponse or a NATS error
+- Paip build a response object out of the paipResponse
 - if NATS error Paip build a ErrorPaipResponse {service:'client', subject, tx:1234, time, error, statusCode, getResult()=>{}}
 - Paip return to the application code getResult() which return the content of result if exists or throws error. 

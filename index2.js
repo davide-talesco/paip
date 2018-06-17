@@ -135,6 +135,9 @@ const Paip = stampit({
     invoke(subject, ...args) {
       const paip = this;
 
+      // build the subject where to publish service logs like **SERVICENAME**.**_LOG**.`subject`
+      const logSubject = paip.service.name + '._LOG.' + subject;
+
       return new Promise((resolve)=>{
 
         // if subject is already a Request it means this is a related request being invoked
@@ -144,7 +147,7 @@ const Paip = stampit({
           return resolve(request);
         }
         // else this is a new request
-        resolve(Request({service: paip.service.name, subject, args}));
+        return resolve(Request({service: paip.service.name, subject, args}));
       })
         .then(request => {
           // publish it to subject and wait for the response
@@ -152,17 +155,20 @@ const Paip = stampit({
             .then(response => {
               // if response its NATS error throw it so we can wrap it around a paipResponse Object
               if(response instanceof NATS.NatsError) {
+                // this is to monitor if request never left or timed out
+                paip.nats.publish(logSubject, ErrorResponse({service: paip.service.name, request, error:response}));
+
                 throw response
               }
-              // will throw if response does not have the right props
-              return Response(response);
+              // parse response into a paipResponse object
+              return IncomingResponse({response});
             })
             .catch(err => {
-              return ErrorResponse({service: paip.service.name, request, error:err})
+              return ErrorResponse({service: paip.service.name, request, error:err});
             })
-        })
-        .then(paipResponse => {
-          return paipResponse.getResult()
+            .then(paipResponse => {
+              return paipResponse.getResult()
+            })
         })
     },
     expose(subject, appHandler){
@@ -177,6 +183,9 @@ const Paip = stampit({
 
       // namespace subject under service full name
       const fullSubjectName = paip.service.fullName + '.' + subject;
+
+      // build the subject where to publish service logs like **SERVICENAME**.**_LOG**.`subject`
+      const logSubject = paip.service.name + '._LOG.' + subject;
 
       // subscribe to subject
       paip.nats.expose(fullSubjectName, queue, function(request, replyTo){
@@ -196,13 +205,39 @@ const Paip = stampit({
               })
               // send it back to the caller
               .then(response => {
-                paip.nats.publish(replyTo, response)
+                paip.nats.publish(replyTo, response);
+                // also publish the tuple request response for monitoring
+                paip.nats.publish(logSubject, {request: request, response});
               })
-              // this should never happen!
-              .catch(err => {
-                console.log('cazzo!')
-              })
+              // TODO this should never happen! but should we log it ?
+              .catch(()=>{})
           })
+      });
+    },
+    broadcast(subject, payload){
+      const paip = this;
+
+      return new Promise((resolve)=>{
+        resolve(BroadcastMessage({subject, payload}))
+      })
+        .then(message => {
+          return paip.nats.publish(subject, message);
+        })
+    },
+    observe(subject, handler){
+      const paip = this;
+
+      assert(subject, 'subject is required when observing');
+      assert(typeof handler === 'function', 'handler is required and should be a function');
+
+      // the name of the queue map to the name of the service
+      const queue = paip.service.fullName;
+
+      this.nats.subscribe(subject, queue, function(message){
+
+        Promise.resolve(message)
+          .then(handler)
+          // TODO should we catch ?
       });
     },
     close(){
@@ -217,6 +252,22 @@ const Paip = stampit({
   }
 })
   .compose(Privatize);
+
+const BroadcastMessage = stampit({
+  initializers: [
+    function({subject, payload}){
+
+      if (subject) this.subject = subject;
+      if (payload) this.payload = payload;
+
+      assert(this.subject, 'subject must exists in Broadcast Message');
+      assert(this.payload, 'payload must exists in Broadcast Message');
+
+      if (!this.transactionId)
+        this.transactionId = uuidv4();
+    }
+  ],
+});
 
 const IncomingRequest = stampit({
   initializers: [
@@ -265,7 +316,7 @@ const Request = stampit({
 
 const Response = stampit({
   initializers: [
-    function({service, subject, tx, time, result, error, statusCode}){
+    function({service, subject, tx, time, result, statusCode}){
       // required props
       if (service) this.service = service;
       if (subject) this.subject = subject;
@@ -275,7 +326,6 @@ const Response = stampit({
 
       // optional props
       if (result) this.result = result;
-      if (error) this.error = Errio.fromObject(error);
 
       assert(this.service, 'service must exists in Response object');
       assert(this.subject, 'subject must exists in Response object');
@@ -288,12 +338,21 @@ const Response = stampit({
   methods: {
     getResult(){
       if (this.error)
-        throw this.error;
+        throw Errio.fromObject(this.error);
 
       return this.result;
     }
   }
 });
+
+const IncomingResponse = stampit({
+  initializers:[
+    function({response}){
+      Object.keys(response).map(n => this[n] = response[n]);
+    }
+  ]
+})
+  .compose(Response);
 
 const OutgoingResponse = stampit({
   initializers: [
@@ -319,6 +378,7 @@ const ErrorResponse = stampit({
       if (error){
         this.error = JSON.parse(Errio.stringify(error));
         error.statusCode ? this.statusCode = error.statusCode : this.statusCode = 500;
+        this.error.statusCode = this.statusCode;
       }
       // set time
       this.time = new Date();
@@ -327,120 +387,41 @@ const ErrorResponse = stampit({
 })
   .compose(Response);
 
-// TODO log is not printing client name
 const Logger = stampit({
-  initializers: [
-    function (opts, { stamp }) {
-      const configuration = stamp.compose.configuration;
+  initializers:[
+    function({service, logLevel}){
+      // initialize options and payload
+      this.options = {};
+      this._payload = {};
 
-      // make sure we create the _payload at every initialization
-      this._payload= {};
-      // inject the stamp configuration into the object
-      this._payload.client = configuration.client;
-      this.logLevel = configuration.logLevel;
-    },
-    function() {
-      if (this.logLevel === 0){
-        this.info = ()=>{};
-        this.error = ()=>{};
-        this.warn = ()=>{};
+      if (service){
+        this.options.service = service;
+        // also set it in the payload
+        this._payload.service = service;
+      }
+      if (logLevel){
+        this.options.logLevel = logLevel
       }
     }
   ],
-  methods:{
+  methods: {
+    child(){
+      // children logger should get parent options and parent _.payload
+      const childLogger =  Logger(this.options);
+      childLogger.set(this._payload);
+      return childLogger;
+    },
     info(){
-      this._payload.time = new Date();
-      // info level
       this._payload.level = 30;
-      if (this._payload.method === 'expose' || this._payload.method === 'invoke'){
-        // this is a request - response log entry type
-        if (this.logLevel >= 30){
-          // log only the final request status
-          const status = RequestStatus({request: this._payload.request, response: this._payload.response});
-
-          Object.keys(status).map(n => this._payload[n] = status[n]);
-
-          // delete response and request
-          delete this._payload.response;
-          delete this._payload.request
-        }
-        else {
-          // serialize request and response object
-          this._payload.request = this._payload.request.serialize();
-          this._payload.response = this._payload.response.serialize();
-        }
-
-      }
-      else if (this.logLevel >= 30 && this._payload.method === 'broadcast' ){
-        // remove message payload
-        this._payload.message = R.omit(['payload'], this._payload.message);
-      }
-      else if (this.logLevel >= 30 && this._payload.method === 'broadcast' ){
-        // remove message
-        delete this._payload.message;
-      }
-      console.log(JSON.stringify(this._payload))
-    },
-    warn(error){
-      this._payload.time = new Date();
-      // info level
-      this._payload.level = 40;
-      this._payload.error = error;
-
-      console.log(JSON.stringify(this._payload))
-    },
-    error(error){
-      this._payload.time = new Date();
-      // info level
-      this._payload.level = 50;
-      if (this._payload.method === 'expose' || this._payload.method === 'invoke') {
-        // this is a request - response log entry type
-        if(this.logLevel >= 30){
-          // build status
-          const status = RequestStatus({request: this._payload.request, response: error, error});
-
-          // spread status object props on this
-          Object.keys(status).map(n => this._payload[n] = status[n]);
-
-          // delete request
-          delete this._payload.request
-        }
-        else{
-          // serialize request and response object
-          this._payload.request = this._payload.request.serialize();
-        }
-
-      }
-      else if (this.logLevel >= 30 && this._payload.broadcastMessage ){
-
-        // build status
-        const status = {
-          subject: this._payload.broadcastMessage.subject,
-          transactionId: this._payload.broadcastMessage.transactionId,
-          error: error
-        };
-
-        Object.keys(status).map(n => this._payload[n] = status[n]);
-
-        // delete the full broadcastMessage
-        delete this._payload.broadcastMessage;
-      }
-      else {
-        // any other case just set the error object in the payload
-        this._payload.error = error;
-      }
-
       console.log(JSON.stringify(this._payload))
     },
     set(props){
+      if (typeof props !== 'object')
+        return this;
       // stamp this object with each property of props
       Object.keys(props).map(n => this._payload[n] = props[n]);
       return this;
     }
-  },
-  conf:{
-    // 20 === debug, 30 === info , 40 === warn, 50 === error
-    logLevel: 30
   }
 });
 
