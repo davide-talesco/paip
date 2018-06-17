@@ -4,7 +4,7 @@
  */
 
 'use strict';
-const Paip = require('../index2');
+const Paip = require('../index');
 const Lab = require('lab');
 const { expect } = require('code');
 
