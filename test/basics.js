@@ -4,7 +4,7 @@
  */
 
 'use strict';
-const Paip = require('../index');
+const Paip = require('../index2');
 const Lab = require('lab');
 const { expect } = require('code');
 
@@ -21,16 +21,16 @@ experiment('invoke api,', () => {
 
   lab.before(() => {
 
-    server.expose('add', 'this is a test remote function', function(r){
+    server.expose('add', function(r){
       const [x, y] = r.getArgs();
       return x + y;
     });
 
-    server.expose('throwSync', 'this function throw an error synchronously', function(r){
+    server.expose('throwSync', function(r){
       throw new Error('SyncError')
     });
 
-    server.expose('throwAsync', 'this function throws an error asynchronously', function(r){
+    server.expose('throwAsync', function(r){
       return new Promise((_,r) =>r(new Error('AsyncError')));
     });
 
@@ -104,7 +104,7 @@ experiment('broadcast api', () => {
         resolve()
       });
     });
-    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick works!) check crap/broadcast-observe-race-condition.js
+    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick doesn't work!) check crap/broadcast-observe-race-condition.js
     setTimeout(()=> server.broadcast('greetings', 'ciao'), 100);
 
     return Promise.all([msg1, msg2])
