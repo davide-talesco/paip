@@ -84,12 +84,14 @@ Argument | Required | Description
 ## INVOKE
 With invoke a service can execute a remote method exposed over nats:
  
-`paip.invoke(subject, ...args)`
+`paip.invoke(request)`
 
-Argument | Required | Description
+### REQUEST SCHEMA
+
+Argument | Required | Type | Description
 -------- | -------- | -----------
-`subject` | **true** | this is the subject where to publish the message
-`...args` | **true** | this is the list of arguments to send to the remote method
+`subject` | **true** | string | this is the subject where to publish the message
+`args` | **false** | list | this is the list of arguments to send to the remote method and if passed must be an Array
 
 The function returns a Promise that resolves with just the result of the remote method or reject if 
 the remote method threw any error or if there was any error sending /receiving the messages .
@@ -108,7 +110,7 @@ The function returns a Promise that resolves with no result or reject if any err
 
 # MESSAGES
 
-## BROADCAST OBJECT
+## BROADCAST MESSAGE
 
 Property Name | Type  | Description
 -------- | -------- |  ------- |
@@ -118,7 +120,7 @@ Property Name | Type  | Description
 `time` | date | this is time the message was broadcasted
 `payload` | object | this is the payload of the message
 
-## REQUEST OBJECT
+## REQUEST MESSAGE
 
 Property Name | Type | Description
 -------- | -------- | ------- |
@@ -128,7 +130,7 @@ Property Name | Type | Description
 `tx` | string | this is the transaction Id of the request
 `time` | date | this is the time the request was made
 
-## RESPONSE OBJECT
+## RESPONSE MESSAGE
 
 Property Name | Type | Description
 -------- | -------- | ------- |

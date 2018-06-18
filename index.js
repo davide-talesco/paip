@@ -140,28 +140,29 @@ const Paip = stampit({
     getConnection() {
       return this.nats.connection;
     },
-    invoke(subject, ...args) {
+    invoke(request) {
       const paip = this;
       // create a new logger instance
       const logger = this.service.logger.child().set({component: 'paip', api: 'invoke'});
-
-      // build the subject where to publish service logs like **SERVICENAME**.**_LOG**.`subject`
-      const logSubject = paip.service.name + '._LOG.' + subject;
 
       return new Promise((resolve)=>{
 
         // if subject is already a Request it means this is a related request being invoked
         // from within expose hence it is already a Request object
-        if (subject instanceof Request){
-          const request = subject;
+        if (request instanceof Request){
           return resolve(request);
         }
         // else this is a new request
-        return resolve(Request({service: paip.service.name, subject, args}));
+        // TODO update Request to accept only request
+        return resolve(Request({service: paip.service.name, request}));
       })
         .then(request => {
+
+          // build the subject where to publish service logs like **SERVICENAME**.**_LOG**.`subject`
+          const logSubject = paip.service.name + '._LOG.' + request.subject;
+
           // publish it to subject and wait for the response
-          return paip.nats.invoke(subject, request)
+          return paip.nats.invoke(request.subject, request)
             .then(response => {
               // if response its NATS error throw it so we can wrap it around a paipResponse Object
               if(response instanceof NATS.NatsError) {
@@ -322,7 +323,7 @@ const IncomingRequest = stampit({
   initializers: [
     function({paip, request}){
       // request should be a valid request
-      if (request) this.request = Request(request);
+      if (request) this.request = R.clone(request);
       if (paip) this.paip = paip;
 
       assert(this.paip, 'paip must exists in Request object');
@@ -334,11 +335,11 @@ const IncomingRequest = stampit({
     getArgs(){
       return this.request.args;
     },
-    invoke(subject, args){
+    invoke(request){
 
-      const request = Request({service: this.paip.service.name, subject, args, tx: this.request.tx});
+      return paip.invoke(Request({service: this.paip.service.name, request, tx: this.request.tx}));
 
-      return paip.invoke(request)
+
     },
   }
 });
@@ -367,21 +368,30 @@ const ResponseStatus = stampit({
 
 const Request = stampit({
   initializers: [
-    function({service, subject, args}){
+    function({service, request, tx}){
 
-      if (args) this.args = args;
-      if (subject) this.subject = subject;
+      if (request) {
+        this.args = request.args;
+        this.subject = request.subject;
+      }
       if (service) this.service = service;
-
-      assert(this.service, 'service must exists in Request object');
-      assert(this.subject, 'subject must exists in Request object');
-      assert(this.args, 'args must exists in Request object');
+      if (tx) this.tx = tx;
 
       if (!this.tx)
         this.tx = uuidv4();
       this.time = new Date();
+      if (!this.args)
+        this.args = []
+
+      assert(this.service, 'service must exists in Request object');
+      assert(this.subject, 'subject must exists in Request object');
+      assert(Array.isArray(this.args), 'args if exists must be an Array in Request object');
+
     }
-  ]
+  ],
+  props:{
+    args: []
+  }
 })
   .compose(InstanceOf);
 

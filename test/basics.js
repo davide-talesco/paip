@@ -43,13 +43,13 @@ experiment('invoke api,', () => {
   });
 
   test('invoke a remote method', async ()=>{
-    const res = await client.invoke('server.add', 5, 4);
+    const res = await client.invoke({subject: 'server.add', args: [5, 4]});
     expect(res).to.equal(9);
   });
 
   test('invoke a remote method that throws synchronously', async ()=>{
     try{
-      await client.invoke('server.throwSync')
+      await client.invoke({subject: 'server.throwSync'})
     }
     catch(e){
       expect(e).to.be.an.error('SyncError');
@@ -59,7 +59,7 @@ experiment('invoke api,', () => {
 
   test('invoke a remote method that throws asynchronously', async ()=>{
     try{
-      await client.invoke('server.throwAsync')
+      await client.invoke({subject: 'server.throwAsync'})
     }
     catch(e){
       expect(e).to.be.an.error('AsyncError');
@@ -76,9 +76,18 @@ experiment('invoke api,', () => {
     }
 
   });
+
+  test('invoke with args !== Array', async ()=>{
+    try{
+      await client.invoke({subject: 'server.add', args: 3})
+    }
+    catch(e){
+      expect(e).to.be.an.error('args if exists must be an Array in Request object');
+    }
+
+  });
 });
 
-// TODO solve problems in crap/crap.js
 experiment('broadcast api', () => {
   const server = Paip({name:'server', logLevel:'off'});
   const client = Paip({name:'client', logLevel:'off'});
