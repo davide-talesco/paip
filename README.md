@@ -89,7 +89,7 @@ With invoke a service can execute a remote method exposed over nats:
 ### REQUEST SCHEMA
 
 Argument | Required | Type | Description
--------- | -------- | -----------
+-------- | -------- | ----------- | ----
 `subject` | **true** | string | this is the subject where to publish the message
 `args` | **false** | list | this is the list of arguments to send to the remote method and if passed must be an Array
 
