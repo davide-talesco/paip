@@ -149,6 +149,7 @@ The request object that **expose** handlers will receive has the following inter
 Property Name | Return Type |  Description
 -------- | -------- | ------- |
 `getArgs` | array  | this is the method to get the args of the request
+`getTransactionId` | string  | this is the method to get the transaction Id of the request
 `invoke` | Promise(result)  | this is the method to make another request with the same transactionId of the incoming request
 
 

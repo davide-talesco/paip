@@ -335,9 +335,12 @@ const IncomingRequest = stampit({
     getArgs(){
       return this.request.args;
     },
+    getTransactionId(){
+      return this.request.tx;
+    },
     invoke(request){
 
-      return paip.invoke(Request({service: this.paip.service.name, request, tx: this.request.tx}));
+      return this.paip.invoke(Request({service: this.paip.service.name, request, tx: this.request.tx}));
 
 
     },
