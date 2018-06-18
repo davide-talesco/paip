@@ -186,12 +186,15 @@ client.invoke('math.add', 3, 4)
 **What is a Request ?**
 
 For the Application Business code
+
 `A function name (the nats subject) and a list of arguments`
  
 For paip
+
 `The name of the 'Application Business code' the nats subject and the list of arguments`
 
 for nats
+
 `A subject and a message`
 
 Outgoing request flow (service client)
