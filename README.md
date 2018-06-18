@@ -114,19 +114,19 @@ The function returns a Promise that resolves with no result or reject if any err
 
 Property Name | Type  | Description
 -------- | -------- |  ------- |
-`subject` | string | this is the subject where to publish the request
 `service` | string |this is the name of the service making the request
+`subject` | string | this is the subject where to publish the request
+`payload` | object | this is the payload of the message
 `tx` | string |this is the transaction Id of the request
 `time` | date | this is time the message was broadcasted
-`payload` | object | this is the payload of the message
 
 ## REQUEST MESSAGE
 
 Property Name | Type | Description
 -------- | -------- | ------- |
 `service` | string | this is the name of the service making the request
-`args` | array | this is the arguments to be passed to the remote method
 `subject` | string | this is the subject where to publish the request
+`args` | array | this is the arguments to be passed to the remote method
 `tx` | string | this is the transaction Id of the request
 `time` | date | this is the time the request was made
 
@@ -136,11 +136,11 @@ Property Name | Type | Description
 -------- | -------- | ------- |
 `service` | string | this is the name of the service sending the response
 `subject` | string | this is the subject of the request this response belong go
-`tx` | string | this is the transaction Id of the request
-`time` | date | this is the time the response was sent
 `statusCode` | number | this is the statusCode of the response
 `result` | any | this is the optional result data of the response
 `error` | object | this is the optional error object only present if this is an error respone
+`tx` | string | this is the transaction Id of the request
+`time` | date | this is the time the response was sent
 
 ## INCOMING REQUEST API
 
