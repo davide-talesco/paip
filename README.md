@@ -20,9 +20,25 @@ Property Name | Type | Required |  Default | Description
 -------- | -------- | ----------- | -------- | ------- |
 `name` | string | **true** | N/A |  this is name of the paip service. 
 `namespace` | string | **false** | '' | this is the base name space for the service
-`nats` | object | **false** | {} | this is the node-nats client connect option object https://github.com/nats-io/node-nats
+`nats` | Object OR String | **false** | {} | this is the node-nats client connect option object https://github.com/nats-io/node-nats
 `timeout` | number | **false** | 5000 | this is the milliseconds paip wait before declaring a request timed out
 `logLevel` | string | **false** | info | valid values are off, info, debug
+
+#### Environment Variables
+
+All options are also configurable through environment variables:
+
+Option Name | ENV Key Name | 
+-------- | -------- |
+name | `PAIP_NAME` | 
+namespace `PAIP_NAMESPACE` | 
+nats | `PAIP_NATS` | 
+timeout | `PAIP_TIMEOUT` | 
+logLevel | `PAIP_LOG_LEVEL` | 
+
+If both are passed environment variables have precedence and will overwrite the value passed programmatically.
+
+*Note* PAIP_NATS should be stringified as it is an object
 
 ## NATS Socket Connection Reference (for connection error handling)
 
@@ -181,6 +197,7 @@ client.invoke('math.add', 3, 4)
   .catch(console.error)
   .then(()=> client.close());
 ```
+
 
 # Request - Response objects internals
 
