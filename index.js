@@ -47,7 +47,7 @@ const Nats = stampit({
           .info();
       });
 
-      this.connection.on("disconnect", function() {
+      this.connection.on("disconnect", function(e) {
         log
           .child()
           .set({ message: "disconnected from Nats" })
@@ -73,6 +73,23 @@ const Nats = stampit({
           .child()
           .set({ message: "closed Nats connection" })
           .warn();
+      });
+
+
+      return new Promise((resolve, reject)=>{
+        var err;
+
+        this.connection.once('connect', function(){
+          resolve();
+        });
+        this.connection.once('error', function(e){
+          err = e;
+        });
+
+        // set a timeout and if by then resolve has not yet been called crash it
+        setTimeout(()=> {
+          reject(Errio.fromObject(err || {message: 'Could not connect to Nats Server on start!'}))
+        }, this.timeout)
       });
     },
     invoke(subject, request) {
@@ -184,7 +201,7 @@ const Paip = stampit({
         logger: instance.service.logger
       });
       // connect to NATS
-      instance.nats.connect();
+      instance.nats.connect()
     }
   ],
   methods: {
