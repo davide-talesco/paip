@@ -31,7 +31,7 @@ All options are also configurable through environment variables:
 Option Name | ENV Key Name | 
 -------- | -------- |
 name | `PAIP_NAME` | 
-namespace `PAIP_NAMESPACE` | 
+namespace | `PAIP_NAMESPACE` | 
 nats | `PAIP_NATS` | 
 timeout | `PAIP_TIMEOUT` | 
 logLevel | `PAIP_LOG_LEVEL` | 
