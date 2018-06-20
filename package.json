@@ -1,6 +1,6 @@
 {
   "name": "paip",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Light Framework built around NATS",
   "main": "index.js",
   "scripts": {
