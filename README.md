@@ -192,7 +192,7 @@ const Paip = require('paip');
 
 const client = Paip({name:'client'});
 
-client.invoke('math.add', 3, 4)
+client.invoke({subject: 'math.add', args: [3, 4]})
   .then(console.log)
   .catch(console.error)
   .then(()=> client.close());
