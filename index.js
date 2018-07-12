@@ -386,11 +386,11 @@ const Paip = stampit({
         .set({ message: "Exposed local method", subject })
         .info();
     },
-    broadcast(subject, payload) {
+    broadcast(subject, payload, metadata = {}) {
       const paip = this;
 
       return new Promise(resolve => {
-        resolve(BroadcastMessage({ subject, payload }));
+        resolve(BroadcastMessage({ subject, payload, metadata }));
       }).then(message => {
         return paip.nats.publish(subject, message);
       });
@@ -426,9 +426,10 @@ const Paip = stampit({
 
 const BroadcastMessage = stampit({
   initializers: [
-    function({ subject, payload }) {
+    function({ subject, payload, metadata }) {
       if (subject) this.subject = subject;
       if (payload) this.payload = payload;
+      if (metadata) this.metadata = metadata;
 
       assert(this.subject, "subject must exists in Broadcast Message");
       assert(this.payload, "payload must exists in Broadcast Message");
@@ -453,6 +454,9 @@ const IncomingRequest = stampit({
   methods: {
     getArgs() {
       return this.request.args;
+    },
+    getMetadata() {
+      return this.request.metadata;
     },
     getTransactionId() {
       return this.request.tx;
@@ -497,6 +501,7 @@ const Request = stampit({
       if (request) {
         this.args = request.args;
         this.subject = request.subject;
+        this.metadata = request.metadata;
       }
       if (service) this.service = service;
       if (tx) this.tx = tx;

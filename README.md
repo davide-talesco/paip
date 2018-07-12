@@ -65,7 +65,7 @@ Argument | Required | Description
 **paip** internally subscribes on `subject` and whenever a `IncomingRequest` is received it invokes the `handler` with the message
 and wait a result. Check [incoming request api](#incoming-request-api) to understand how to interact with it.
 
-It then wraps the result returned (or the error thrown) by the handler within a `Response`and publishes it back to the caller
+It then wraps the result returned (or the error thrown) by the handler within a `Response` and publishes it back to the caller
 via the `IncomingRequest` unique _INBOX reply To subject. check official nats client documentation for more info on what _INBOX subject is.
 
 The `handler` function should return a value, a promise or simply throw an error.
@@ -115,12 +115,13 @@ the remote method threw any error or if there was any error sending /receiving t
 ## BROADCAST
 A service can publish a message without expecting any reply:
 
-`paip.broadcast(subject, payload)`
+`paip.broadcast(subject, payload, metadata)`
 
-Argument | Required | Description
+Argument | Required | Type | Description
 -------- | -------- | -----------
-`subject` | string | **true** | this is the subject where to publish the message
-`payload` | **true** | this is the payload of the message to be sent
+`subject` | **true** | string | this is the subject where to publish the message
+`payload` | **true** | any | this is the payload of the message to be sent
+`metadata`? | **false** | any | this is the payload of the message to be sent
 
 The function returns a Promise that resolves with no result or reject if any error publishing the message;
 
@@ -133,6 +134,7 @@ Property Name | Type  | Description
 `service` | string |this is the name of the service making the request
 `subject` | string | this is the subject where to publish the request
 `payload` | object | this is the payload of the message
+`metadata`? | any | this is an optional metadata object
 `tx` | string |this is the transaction Id of the request
 `time` | date | this is time the message was broadcasted
 
@@ -143,6 +145,7 @@ Property Name | Type | Description
 `service` | string | this is the name of the service making the request
 `subject` | string | this is the subject where to publish the request
 `args` | array | this is the arguments to be passed to the remote method
+`metadata`? | any | this is an optional metadata object
 `tx` | string | this is the transaction Id of the request
 `time` | date | this is the time the request was made
 
@@ -165,9 +168,9 @@ The request object that **expose** handlers will receive has the following inter
 Property Name | Return Type |  Description
 -------- | -------- | ------- |
 `getArgs` | array  | this is the method to get the args of the request
+`getMetadata` | any  | this is the method to get the metadata of the request
 `getTransactionId` | string  | this is the method to get the transaction Id of the request
 `invoke` | Promise(result)  | this is the method to make another request with the same transactionId of the incoming request
-
 
 # USAGE
 

@@ -48,6 +48,11 @@ experiment('invoke api,', () => {
     expect(res).to.equal(9);
   });
 
+  test('invoke a remote method with metadata', async ()=>{
+    const res = await client.invoke({subject: 'server.add', args: [5, 4], metadata: {index: 1}});
+    expect(res).to.equal(9);
+  });
+
   test('invoke a remote method that throws synchronously', async ()=>{
     try{
       await client.invoke({subject: 'server.throwSync'})
@@ -90,10 +95,15 @@ experiment('invoke api,', () => {
 });
 
 experiment('broadcast api', () => {
-  const server = Paip({name:'server', logLevel:'off'});
-  const client = Paip({name:'client', logLevel:'off'});
+  var server;
+  var client;
 
-  lab.after(()=>{
+  lab.beforeEach(() => {
+    server = Paip({name:'server', logLevel:'off'});
+    client = Paip({name:'client', logLevel:'off'});
+  });
+
+  lab.afterEach(()=>{
     client.close();
     server.close();
   });
@@ -111,6 +121,21 @@ experiment('broadcast api', () => {
 
     return Promise.all([msg1])
   });
+
+  test('send a broadcast message with metadata', async()=>{
+    const msg1 = new Promise((resolve)=>{
+      client.observe('greetings', msg => {
+        expect(msg.metadata).to.be.equal({ index: 1});
+        resolve()
+      });
+    });
+
+    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick doesn't work!) check crap/broadcast-observe-race-condition.js
+    setTimeout(()=> server.broadcast('greetings', 'ciao', { index: 1}), 100);
+
+    return Promise.all([msg1])
+  });
+
 });
 
 experiment('expose api', () => {
@@ -130,6 +155,10 @@ experiment('expose api', () => {
       return x + y;
     });
 
+    serverb.expose('metadata', function(r){
+      return r.getMetadata();
+    });
+
     return new Promise((resolve)=>setTimeout(resolve, 100))
   });
 
@@ -141,6 +170,11 @@ experiment('expose api', () => {
   test('2 instances of the same service exposing a local method only one will receive it', async ()=>{
     const res = await client.invoke({subject: 'server.add', args: [5, 4]});
     expect(res).to.equal(9);
+  });
+
+  test('metadata should be available if provided by caller', async ()=>{
+    const res = await client.invoke({subject: 'server.metadata', args: [5, 4], metadata: { index : 1}});
+    expect(res).to.equal({ index : 1});
   });
 });
 
