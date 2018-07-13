@@ -18,8 +18,9 @@ const LOG_LEVEL_MAP = {
 
 const Nats = stampit({
   initializers: [
-    function({ options, timeout, logger }) {
-      if (options) this.options = R.mergeDeepLeft(this.options, options);
+    function({ connectionUrlList, timeout, logger }) {
+
+      if (connectionUrlList) this.options = R.mergeDeepLeft(this.options, {servers: connectionUrlList});
       if (timeout) this.timeout = timeout;
       if (logger) this.logger = logger;
     }
@@ -190,13 +191,18 @@ const Paip = stampit({
       timeout = process.env.PAIP_TIMEOUT || timeout;
       nats = process.env.PAIP_NATS || nats;
 
-      // nats option might be an object or a string so should try to parse it
-      try {
-        nats = JSON.parse(nats);
-      } catch (e) {}
+      // nats option might be an array or a string
+      // if it is a string we should parse it
+      if (typeof nats === 'string'){
+        try {
+          nats = JSON.parse(nats);
+        } catch (e) {
+          throw new Error('nats option / PAIP_NATS env variable should be either an array or a stringified array of nats connection url')
+        }
+      }
 
       instance.nats = Nats({
-        options: nats,
+        connectionUrlList: nats,
         timeout,
         logger: instance.service.logger
       });
