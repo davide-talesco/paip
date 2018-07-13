@@ -189,7 +189,20 @@ const Paip = stampit({
     ({ nats, timeout }, { instance }) => {
       // merge environment variables if set
       timeout = process.env.PAIP_TIMEOUT || timeout;
-      nats = process.env.PAIP_NATS || nats;
+      nats = parseNats(process.env.PAIP_NATS || nats);
+
+      function parseNats(nats){
+        if (!nats) return;
+        // nats can be a string, a comma separated string and an array of string
+        if (Array.isArray(nats)){
+          // nats is already an array
+          return nats
+        }
+        // split any comma separated url
+        return nats.split(',')
+        // trim any whitespace
+          .map(url => url.trim());
+      }
 
       // nats option might be an array or a string
       // if it is a string we should parse it
