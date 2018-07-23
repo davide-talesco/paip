@@ -299,7 +299,7 @@ experiment("transaction ID", () => {
   });
 });
 
-experiment.only("transform incoming request properties", () => {
+experiment("transform incoming request properties", () => {
   const server = Paip({ name: "server", logLevel: "off" });
   const client = Paip({ name: "client", logLevel: "off" });
 
