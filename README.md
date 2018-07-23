@@ -108,6 +108,7 @@ Argument | Required | Type | Description
 -------- | -------- | ----------- | ----
 `subject` | **true** | string | this is the subject where to publish the message
 `args` | **false** | list | this is the list of arguments to send to the remote method and if passed must be an Array
+`metadata` | **false** | list | this is an optional metadata object
 
 The function returns a Promise that resolves with just the result of the remote method or reject if 
 the remote method threw any error or if there was any error sending /receiving the messages .
