@@ -21,7 +21,7 @@ Property Name | Type | Required |  Default | Description
 `name` | string | **true** | N/A |  this is name of the paip service. 
 `namespace` | string | **false** | '' | this is the base name space for the service
 `nats` | url or url, url or [url] | **false** | {} | this is the node-nats connection url. it can be a single url, a comma separated url or an array of url ["nats://localhost:4222", "nats://localhost:4223"] https://github.com/nats-io/node-nats
-`timeout` | number | **false** | 5000 | this is the milliseconds paip wait before declaring a request timed out
+`timeout` | number | **false** | 25000 | this is the milliseconds paip wait before declaring a request timed out
 `logLevel` | string | **false** | info | valid values are off, info, debug
 
 #### Environment Variables
