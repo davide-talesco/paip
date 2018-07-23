@@ -1,4 +1,5 @@
 const NATS = require("nats");
+const _ = require('lodash');
 const uuidv4 = require("uuid/v4");
 const stampit = require("@stamp/it");
 const InstanceOf = require("@stamp/instanceof");
@@ -474,8 +475,29 @@ const IncomingRequest = stampit({
     getArgs() {
       return this.request.args;
     },
-    getMetadata() {
-      return this.request.metadata;
+    setArgs(args){
+      assert(_.isArray(args), 'args must be an array if provided');
+      this.request.args = args;
+
+      // return this so we can chain
+      return this;
+    },
+    getMetadata(path){
+      if (!path) return this.request.metadata;
+      // make sure it works also if user specify just a string
+      path = _.castArray(path);
+      return R.path(path, this.request.metadata);
+    },
+    setMetadata(path, value){
+
+      assert(path, 'path is required by Paip IncomingRequest setter method');
+      assert(value, 'value is required by Paip IncomingRequest setter method');
+
+      path = _.castArray(path);
+      this.request.metadata = R.assocPath(path, value, this.request.metadata);
+
+      // return this so we can chain
+      return this;
     },
     getTransactionId() {
       return this.request.tx;
@@ -520,7 +542,7 @@ const Request = stampit({
       if (request) {
         this.args = request.args;
         this.subject = request.subject;
-        this.metadata = request.metadata;
+        this.metadata = request.metadata || {};
       }
       if (service) this.service = service;
       if (tx) this.tx = tx;
@@ -538,7 +560,8 @@ const Request = stampit({
     }
   ],
   props: {
-    args: []
+    args: [],
+    metadata: {}
   }
 }).compose(InstanceOf);
 

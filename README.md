@@ -165,10 +165,12 @@ Property Name | Type | Description
 
 The request object that **expose** handlers will receive has the following interfaces:
 
-Property Name | Return Type |  Description
+Property Name | Input Type | Return Type |  Description
 -------- | -------- | ------- |
-`getArgs` | array  | this is the method to get the args of the request
-`getMetadata` | any  | this is the method to get the metadata of the request
+`getArgs` | N/A | array  | this is the method to get the args of the request
+`setArgs(args)` | array  | this | override request.args with args
+`getMetadata(path)` | any  | any | Retrieve the value at a given path of the request metadata object. path must be an array of strings ie. get(['requestor', id]) => return request.metadata.requestor.id
+`setMetadata(path, value)` | any  | Set a specific metadata path to value. return the request object so can be chained
 `getTransactionId` | string  | this is the method to get the transaction Id of the request
 `invoke` | Promise(result)  | this is the method to make another request with the same transactionId of the incoming request
 
