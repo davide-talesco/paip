@@ -245,59 +245,59 @@ const Paip = stampit({
         // TODO update Request to accept only request
         return resolve(Request({ service: paip.service.name, request }));
       }).then(request => {
-        // build the subject where to publish service logs like **SERVICENAME**.**_LOG.INVOKE.**.`subject`
-        const logSubject = paip.service.name + "._LOG.INVOKE." + request.subject;
+          // publish it to subject and wait for the response
+          return paip.nats
+            .invoke(request.subject, request)
+            .then(response => {
+              // if response its NATS error throw it so we can wrap it around a paipResponse Object
+              if (response instanceof NATS.NatsError) {
+                throw response;
+              }
+              // parse response into a paipResponse object
+              return IncomingResponse({ response });
+            })
+            .catch(err => {
+              return ErrorResponse({
+                service: paip.service.name,
+                request,
+                error: err
+              });
+            })
+            .then(paipResponse => {
+              if (/^2/.test("" + paipResponse.getStatusCode())) {
+                // Status Codes equal 2xx
+                logger
+                  .child()
+                  .set(RequestStatus({ request, response: paipResponse }))
+                  .info();
+              } else if (/^4/.test("" + paipResponse.getStatusCode())) {
+                // Status Codes equal 4xx
+                logger
+                  .child()
+                  .set(RequestStatus({ request, response: paipResponse }))
+                  .warn();
+              } else if (/^5/.test("" + paipResponse.getStatusCode())) {
+                // Status Codes equal 5xx
+                logger
+                  .child()
+                  .set(RequestStatus({ request, response: paipResponse }))
+                  .error();
+              }
 
-        // publish it to subject and wait for the response
-        return paip.nats
-          .invoke(request.subject, request)
-          .then(response => {
-            // if response its NATS error throw it so we can wrap it around a paipResponse Object
-            if (response instanceof NATS.NatsError) {
-              throw response;
-            }
-            // parse response into a paipResponse object
-            return IncomingResponse({ response });
-          })
-          .catch(err => {
-            return ErrorResponse({
-              service: paip.service.name,
-              request,
-              error: err
+              // always log the full request - response couple
+              logger
+                .child()
+                .set({ request, response: paipResponse })
+                .debug();
+
+              // build the subject where to publish service logs like **SERVICENAME**.**_LOG.INVOKE.**.`subject`
+              const logSubject = "_LOG.INVOKE." + request.subject;
+
+              // this is to monitor invoke requests
+              paip.broadcast( logSubject, {request, response: paipResponse});
+
+              return paipResponse.getResult();
             });
-          })
-          .then(paipResponse => {
-            if (/^2/.test("" + paipResponse.getStatusCode())) {
-              // Status Codes equal 2xx
-              logger
-                .child()
-                .set(RequestStatus({ request, response: paipResponse }))
-                .info();
-            } else if (/^4/.test("" + paipResponse.getStatusCode())) {
-              // Status Codes equal 4xx
-              logger
-                .child()
-                .set(RequestStatus({ request, response: paipResponse }))
-                .warn();
-            } else if (/^5/.test("" + paipResponse.getStatusCode())) {
-              // Status Codes equal 5xx
-              logger
-                .child()
-                .set(RequestStatus({ request, response: paipResponse }))
-                .error();
-            }
-
-            // always log the full request - response couple
-            logger
-              .child()
-              .set({ request, response: paipResponse })
-              .debug();
-
-            // this is to monitor invoke requests
-            paip.broadcast( logSubject, {request, response: paipResponse});
-
-            return paipResponse.getResult();
-          });
       });
     },
     expose(subject, appHandler) {
@@ -318,9 +318,6 @@ const Paip = stampit({
 
       // namespace subject under service full name
       const fullSubjectName = paip.service.fullName + "." + subject;
-
-      // build the subject where to publish service logs like **SERVICENAME**.**_LOG**.`subject`
-      const logSubject = paip.service.name + "._LOG.EXPOSE." + subject;
 
       // subscribe to subject
       paip.nats.expose(fullSubjectName, queue, function(request, replyTo) {
@@ -355,6 +352,10 @@ const Paip = stampit({
               // send it back to the caller
               .then(response => {
                 paip.nats.publish(replyTo, response);
+
+                // build the subject where to publish service logs
+                const logSubject = "_LOG.EXPOSE." + subject;
+
                 // also publish the tuple request response for monitoring
                 paip.broadcast(logSubject, { request, response });
 
@@ -406,11 +407,13 @@ const Paip = stampit({
     },
     broadcast(subject, payload, metadata = {}) {
       const paip = this;
+      // namespace subject under service full name
+      const fullSubjectName = paip.service.fullName + "." + subject;
 
       return new Promise(resolve => {
-        resolve(BroadcastMessage({ subject, payload, metadata }));
+        resolve(BroadcastMessage({ subject: fullSubjectName, payload, metadata }));
       }).then(message => {
-        return paip.nats.publish(subject, message);
+        return paip.nats.publish(fullSubjectName, message);
       });
     },
     observe(subject, handler) {
