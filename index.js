@@ -470,6 +470,7 @@ const IncomingMessage = stampit({
     }
   }
 });
+
 const BroadcastMessage = stampit({
   initializers: [
     function({ subject, payload, metadata }) {
@@ -489,28 +490,28 @@ const BroadcastMessage = stampit({
 });
 
 const IncomingRequest = stampit.init(function({ paip, request}){
-  if (request) {_.extend(this, request)};
-
+  //if (request) {_.extend(this, request)};
+  const that = _.cloneDeep(request);
   assert(paip, "paip must exists in Request object");
   assert(request, "request must exists in Request object");
 
   this.getArgs = function getArgs() {
-    return this.args;
+    return that.args;
   };
 
   this.setArgs = function setArgs(args){
     assert(_.isArray(args), 'args must be an array if provided');
-    this.args = args;
+    that.args = args;
 
     // return this so we can chain
     return this;
   };
 
   this.getMetadata = function getMetadata(path){
-    if (!path) return this.metadata;
+    if (!path) return that.metadata;
     // make sure it works also if user specify just a string
     path = _.castArray(path);
-    return R.path(path, this.metadata);
+    return R.path(path, that.metadata);
   };
 
   this.setMetadata = function setMetadata(path, value){
@@ -519,14 +520,14 @@ const IncomingRequest = stampit.init(function({ paip, request}){
     assert(value, 'value is required by Paip IncomingRequest setter method');
 
     path = _.castArray(path);
-    this.metadata = R.assocPath(path, value, this.metadata);
+    that.metadata = R.assocPath(path, value, that.metadata);
 
     // return this so we can chain
     return this;
   };
 
   this.getTransactionId = function getTransactionId() {
-    return this.tx;
+    return that.tx;
   };
 
   this.invoke = function invoke(request) {
@@ -534,7 +535,7 @@ const IncomingRequest = stampit.init(function({ paip, request}){
       Request({
         service: paip.service.name,
         request,
-        tx: this.tx
+        tx: that.tx
       })
     );
   };

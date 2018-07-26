@@ -218,26 +218,6 @@ experiment("observe api", () => {
     return Promise.all([msg1, msg2]);
   });
 
-  test("2 separate service observing the same subject they both get it", async () => {
-    const msg1 = new Promise(resolve => {
-      client.observe("server.greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
-        resolve();
-      });
-    });
-
-    const msg2 = new Promise(resolve => {
-      client2.observe("server.greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
-        resolve();
-      });
-    });
-    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick doesn't work!) check crap/broadcast-observe-race-condition.js
-    setTimeout(() => server.broadcast("greetings", "ciao"), 100);
-
-    return Promise.all([msg1, msg2]);
-  });
-
   test("2 instances of the same service observing a subject only one will get it", async () => {
     const msg1 = new Promise(resolve => {
       client2.observe("server.greetings", msg => {
