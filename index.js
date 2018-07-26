@@ -513,59 +513,6 @@ const IncomingRequest = stampit.init(function({ paip, request}){
 
 });
 
-const IncomingRequest2 = stampit({
-  initializers: [
-    function({ paip, request }) {
-
-      if (request) {_.extend(this, request)};
-
-      assert(paip, "paip must exists in Request object");
-      assert(request, "request must exists in Request object");
-    }
-  ],
-  methods: {
-    getArgs() {
-      return this.args;
-    },
-    setArgs(args){
-      assert(_.isArray(args), 'args must be an array if provided');
-      this.args = args;
-
-      // return this so we can chain
-      return this;
-    },
-    getMetadata(path){
-      if (!path) return this.metadata;
-      // make sure it works also if user specify just a string
-      path = _.castArray(path);
-      return R.path(path, this.metadata);
-    },
-    setMetadata(path, value){
-
-      assert(path, 'path is required by Paip IncomingRequest setter method');
-      assert(value, 'value is required by Paip IncomingRequest setter method');
-
-      path = _.castArray(path);
-      this.metadata = R.assocPath(path, value, this.metadata);
-
-      // return this so we can chain
-      return this;
-    },
-    getTransactionId() {
-      return this.tx;
-    },
-    invoke(request) {
-      return P.invoke(
-        Request({
-          service: paip.service.name,
-          request,
-          tx: this.request.tx
-        })
-      );
-    }
-  }
-});
-
 const RequestStatus = stampit({
   initializers: [
     function({ request }) {

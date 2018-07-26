@@ -77,10 +77,10 @@ If the handler function, to respond, needs to call another remote method it can 
 so that every `Request` invoked in line will maintain the same transaction Id as the `IncomingRequest`, so can be traced.
 
 The **expose** method, for each received `Request` - `Request` couple  publishes also a log message
- {`Request`, `Request`} under **[NAMESPACE.]SERVICE_NAME**.**_LOG**.`subject`.
+ {`Request`, `Response`} under **[NAMESPACE.]SERVICE_NAME**.**_LOG**.`subject`.
 
 **NOTE**
-The underlying NATS subscription has {'queue':**SERVICE_NAME**}. Multiple instances of the same service will load balance
+The underlying NATS subscription has {'queue':**SERVICE_NAME**} set. Multiple instances of the same service will load balance
 the incoming messages.
 
 **IMPORTANT**
@@ -138,6 +138,7 @@ Property Name | Type  | Description
 `metadata`? | any | this is an optional metadata object
 `tx` | string |this is the transaction Id of the request
 `time` | date | this is time the message was broadcasted
+`async` | Boolean | always set to true
 
 ## REQUEST MESSAGE
 
@@ -149,6 +150,7 @@ Property Name | Type | Description
 `metadata`? | any | this is an optional metadata object
 `tx` | string | this is the transaction Id of the request
 `time` | date | this is the time the request was made
+`sync` | Boolean | always set to true to indicate this is a synchronous message
 
 ## RESPONSE MESSAGE
 
@@ -174,6 +176,16 @@ Property Name | Input Type | Return Type |  Description
 `setMetadata(path, value)` | any  | Set a specific metadata path to value. return the request object so can be chained
 `getTransactionId` | string  | this is the method to get the transaction Id of the request
 `invoke` | Promise(result)  | this is the method to make another request with the same transactionId of the incoming request
+
+## OBSERVED MESSAGE API
+
+The message object that **observe** handlers will receive has the following interfaces:
+
+Property Name | Input Type | Return Type |  Description
+-------- | -------- | ------- |
+`getSubject` | N/A | string  | this is the method to get the subject of the message
+`getPayload` | N/A | any  | this is the method to get the payload of the message
+`getMetadata(path)` | any  | any | Retrieve the value at a given path of the request metadata object. path must be an array of strings ie. get(['requestor', id]) => return request.metadata.requestor.id
 
 # USAGE
 
