@@ -76,12 +76,15 @@ For known error , the handler should provide a **statusCode** (http status codes
 If the handler function, to respond, needs to call another remote method it can use the `IncomingRequest` *invoke* method
 so that every `Request` invoked in line will maintain the same transaction Id as the `IncomingRequest`, so can be traced.
 
-The **expose** method, for each received `Request` - `Request` couple  publishes also a log message
- {`Request`, `Response`} under **[NAMESPACE.]SERVICE_NAME**.**_LOG**.`subject`.
+The **expose** method, for each received `Request` - `Request` couple broadcast also a log message
+ {`Request`, `Response`} under **[NAMESPACE.]SERVICE_NAME**.**_LOG.EXPOSE**.`subject`.
 
 **NOTE**
 The underlying NATS subscription has {'queue':**SERVICE_NAME**} set. Multiple instances of the same service will load balance
 the incoming messages.
+
+**NOTE**
+exposed handler gets only triggered by messages where message.sync === true such the ones sent by invoke
 
 **IMPORTANT**
 If the service calls expose twice with the same subject, with 2 different handlers, incoming messages will be load balanced between the 2
@@ -97,10 +100,19 @@ Argument | Required | Description
 `subject` | **true** | this is the subject to subscribe to
 `handler` | **true** | this is the handler function to bind the incoming message to
 
+**NOTE**
+observe handler gets only triggered by messages where message.async === true such the ones sent by broadcast.
+
 ## INVOKE
 With invoke a service can execute a remote method exposed over nats:
  
 `paip.invoke(request)`
+
+The **invoke** method, for each received `Request` - `Request` couple broadcast also a log message
+ {`Request`, `Response`} under **[NAMESPACE.]SERVICE_NAME**.**_LOG.INVOKE**.`subject`.
+ 
+**NOTE**
+request sent via invoke will have request.sync === true, to indicate this is a synchronous request.
 
 ### REQUEST SCHEMA
 
@@ -125,6 +137,9 @@ Argument | Required | Type | Description
 `metadata`? | **false** | any | this is the payload of the message to be sent
 
 The function returns a Promise that resolves with no result or reject if any error publishing the message;
+
+**NOTE**
+message sent via broadcast will have request.async === true, to indicate this is an asynchronous request.
 
 # MESSAGES
 

@@ -119,8 +119,8 @@ const Nats = stampit({
       const nats = this.connection;
       // create a new logger instance
       const log = this.logger.child().set({ component: "nats", api: "expose" });
-
-      nats.subscribe(subject, { queue }, function(request, replyTo) {
+      // queue is unique to expose so we can distinguish from subscribe
+      nats.subscribe(subject, { queue: queue + '-expose' }, function(request, replyTo) {
         // if no replyTo? ie. a broadcast message on this subject? simply discard the request
         if (!replyTo) {
           // we can reuse the same logger child instance
@@ -137,7 +137,7 @@ const Nats = stampit({
     },
     subscribe(subject, queue, handler) {
       const nats = this.connection;
-      nats.subscribe(subject, { queue }, handler);
+      nats.subscribe(subject, { queue: queue + '-subscribe' }, handler);
     }
   },
   props: {
@@ -245,8 +245,8 @@ const Paip = stampit({
         // TODO update Request to accept only request
         return resolve(Request({ service: paip.service.name, request }));
       }).then(request => {
-        // build the subject where to publish service logs like **SERVICENAME**.**_LOG**.`subject`
-        const logSubject = paip.service.name + "._LOG." + request.subject;
+        // build the subject where to publish service logs like **SERVICENAME**.**_LOG.INVOKE.**.`subject`
+        const logSubject = paip.service.name + "._LOG.INVOKE." + request.subject;
 
         // publish it to subject and wait for the response
         return paip.nats
@@ -254,16 +254,6 @@ const Paip = stampit({
           .then(response => {
             // if response its NATS error throw it so we can wrap it around a paipResponse Object
             if (response instanceof NATS.NatsError) {
-              // this is to monitor if request never left or timed out
-              paip.nats.publish(
-                logSubject,
-                ErrorResponse({
-                  service: paip.service.name,
-                  request,
-                  error: response
-                })
-              );
-
               throw response;
             }
             // parse response into a paipResponse object
@@ -303,6 +293,9 @@ const Paip = stampit({
               .set({ request, response: paipResponse })
               .debug();
 
+            // this is to monitor invoke requests
+            paip.broadcast( logSubject, {request, response: paipResponse});
+
             return paipResponse.getResult();
           });
       });
@@ -327,10 +320,15 @@ const Paip = stampit({
       const fullSubjectName = paip.service.fullName + "." + subject;
 
       // build the subject where to publish service logs like **SERVICENAME**.**_LOG**.`subject`
-      const logSubject = paip.service.name + "._LOG." + subject;
+      const logSubject = paip.service.name + "._LOG.EXPOSE." + subject;
 
       // subscribe to subject
       paip.nats.expose(fullSubjectName, queue, function(request, replyTo) {
+        // if request.sync is not set this is not a request message symply discard it
+        if (!request.sync){
+          return
+        }
+
         return Promise.resolve(request).then(request => {
           // build the IncomingRequestObject
           const incomingRequest = IncomingRequest({ paip: paip, request });
@@ -358,7 +356,7 @@ const Paip = stampit({
               .then(response => {
                 paip.nats.publish(replyTo, response);
                 // also publish the tuple request response for monitoring
-                paip.nats.publish(logSubject, { request, response });
+                paip.broadcast(logSubject, { request, response });
 
                 // also log it
                 if (/^2/.test("" + response.getStatusCode())) {
@@ -428,7 +426,14 @@ const Paip = stampit({
       const queue = paip.service.fullName;
 
       this.nats.subscribe(subject, queue, function(message) {
-        Promise.resolve(message).then(handler);
+        // if request.async is not set this is not a broadcast message symply discard it
+        if (!message.async){
+          return
+        }
+
+        Promise.resolve(message)
+          .then(IncomingMessage)
+          .then(handler);
         // TODO should we catch ?
       });
     },
@@ -444,6 +449,24 @@ const Paip = stampit({
   }
 }).compose(Privatize);
 
+const IncomingMessage = stampit({
+  initializers: [
+    function(message){
+      Object.keys(message).map(n => (this[n] = message[n]));
+    }
+  ],
+  methods: {
+    getPayload: function(){
+      return this.payload
+    },
+    getMetadata: function getMetadata(path){
+      if (!path) return this.metadata;
+      // make sure it works also if user specify just a string
+      path = _.castArray(path);
+      return R.path(path, this.metadata);
+    }
+  }
+});
 const BroadcastMessage = stampit({
   initializers: [
     function({ subject, payload, metadata }) {
@@ -453,6 +476,8 @@ const BroadcastMessage = stampit({
 
       assert(this.subject, "subject must exists in Broadcast Message");
       assert(this.payload, "payload must exists in Broadcast Message");
+
+      this.async = true;
 
       if (!this.transactionId) this.transactionId = uuidv4();
       this.time = new Date();
@@ -549,6 +574,9 @@ const Request = stampit({
       if (!this.tx) this.tx = uuidv4();
       this.time = new Date();
       if (!this.args) this.args = [];
+
+      // indicate this is a synchronous request
+      this.sync = true;
 
       assert(this.service, "service must exists in Request object");
       assert(this.subject, "subject must exists in Request object");

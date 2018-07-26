@@ -132,6 +132,7 @@ experiment("broadcast api", () => {
 
     return Promise.all([msg1]);
   });
+
 });
 
 experiment("expose api", () => {
@@ -368,12 +369,12 @@ experiment("log messages", () => {
       throw new Error("SyncError");
     });
 
-    server.observe("server._LOG.>", function(msg) {
-      serverLog = msg;
+    server.observe("server._LOG.EXPOSE.>", function(msg) {
+      serverLog = msg.getPayload();
     });
 
-    client.observe("client._LOG.>", function(msg) {
-      clientLog = msg;
+    client.observe("client._LOG.INVOKE.>", function(msg) {
+      clientLog = msg.getPayload();
     });
 
     return new Promise(resolve => setTimeout(resolve, 100));
@@ -390,8 +391,10 @@ experiment("log messages", () => {
     expect(serverLog.request.args).to.equal([3, 4]);
     expect(serverLog.response.result).to.equal(7);
     expect(serverLog.response.statusCode).to.equal(200);
-    // invoke does not generate any log
-    expect(clientLog).to.be.undefined();
+    // invoke generate similar logs
+    expect(clientLog.request.args).to.equal([3, 4]);
+    expect(clientLog.response.result).to.equal(7);
+    expect(clientLog.response.statusCode).to.equal(200);
     serverLog = undefined;
     clientLog = undefined;
   });
@@ -404,8 +407,10 @@ experiment("log messages", () => {
     expect(serverLog.request.args).to.equal([3, 4]);
     expect(serverLog.response.statusCode).to.equal(500);
     expect(serverLog.response.error.message).to.equal("SyncError");
-    // invoke does not generate any log
-    expect(clientLog).to.be.undefined();
+    // invoke generate similar logs
+    expect(clientLog.request.args).to.equal([3, 4]);
+    expect(clientLog.response.statusCode).to.equal(500);
+    expect(clientLog.response.error.message).to.equal("SyncError");
     serverLog = undefined;
     clientLog = undefined;
   });
@@ -418,6 +423,6 @@ experiment("log messages", () => {
     // server does not get the request at all
     expect(serverLog).to.be.undefined();
     // invoke does not generate any log
-    expect(clientLog.error.name).to.equal("NatsError");
+    expect(clientLog.response.error.name).to.equal("NatsError");
   });
 });
