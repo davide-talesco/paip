@@ -131,7 +131,7 @@ A service can publish a message without expecting any reply:
 `paip.broadcast(subject, payload, metadata)`
 
 Argument | Required | Type | Description
--------- | -------- | -----------
+-------- | -------- | ----------- | -----
 `subject` | **true** | string | this is the subject where to publish the message
 `payload` | **true** | any | this is the payload of the message to be sent
 `metadata`? | **false** | any | this is the payload of the message to be sent
@@ -184,7 +184,7 @@ Property Name | Type | Description
 The request object that **expose** handlers will receive has the following interfaces:
 
 Property Name | Input Type | Return Type |  Description
--------- | -------- | ------- |
+-------- | -------- | ------- | -----
 `getArgs` | N/A | array  | this is the method to get the args of the request
 `setArgs(args)` | array  | this | override request.args with args
 `getMetadata(path)` | any  | any | Retrieve the value at a given path of the request metadata object. path must be an array of strings ie. get(['requestor', id]) => return request.metadata.requestor.id
@@ -197,7 +197,7 @@ Property Name | Input Type | Return Type |  Description
 The message object that **observe** handlers will receive has the following interfaces:
 
 Property Name | Input Type | Return Type |  Description
--------- | -------- | ------- |
+-------- | -------- | ------- | ----
 `getSubject` | N/A | string  | this is the method to get the subject of the message
 `getPayload` | N/A | any  | this is the method to get the payload of the message
 `getMetadata(path)` | any  | any | Retrieve the value at a given path of the request metadata object. path must be an array of strings ie. get(['requestor', id]) => return request.metadata.requestor.id
