@@ -107,8 +107,8 @@ experiment("broadcast api", () => {
 
   test("send a broadcast message", async () => {
     const msg1 = new Promise(resolve => {
-      client.observe("greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
+      client.observe("server.greetings", msg => {
+        expect(msg.getPayload()).to.be.equal("ciao");
         resolve();
       });
     });
@@ -121,8 +121,8 @@ experiment("broadcast api", () => {
 
   test("send a broadcast message with metadata", async () => {
     const msg1 = new Promise(resolve => {
-      client.observe("greetings", msg => {
-        expect(msg.metadata).to.be.equal({ index: 1 });
+      client.observe("server.greetings", msg => {
+        expect(msg.getMetadata()).to.be.equal({ index: 1 });
         resolve();
       });
     });
@@ -200,35 +200,15 @@ experiment("observe api", () => {
 
   test("2 separate service observing the same subject they both get it", async () => {
     const msg1 = new Promise(resolve => {
-      client.observe("greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
+      client.observe("server.greetings", msg => {
+        expect(msg.getPayload()).to.be.equal("ciao");
         resolve();
       });
     });
 
     const msg2 = new Promise(resolve => {
-      client2.observe("greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
-        resolve();
-      });
-    });
-    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick doesn't work!) check crap/broadcast-observe-race-condition.js
-    setTimeout(() => server.broadcast("greetings", "ciao"), 100);
-
-    return Promise.all([msg1, msg2]);
-  });
-
-  test("2 separate service observing the same subject they both get it", async () => {
-    const msg1 = new Promise(resolve => {
-      client.observe("greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
-        resolve();
-      });
-    });
-
-    const msg2 = new Promise(resolve => {
-      client2.observe("greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
+      client2.observe("server.greetings", msg => {
+        expect(msg.getPayload()).to.be.equal("ciao");
         resolve();
       });
     });
@@ -240,18 +220,18 @@ experiment("observe api", () => {
 
   test("2 instances of the same service observing a subject only one will get it", async () => {
     const msg1 = new Promise(resolve => {
-      client2.observe("greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
-        resolve(msg.payload);
+      client2.observe("server.greetings", msg => {
+        expect(msg.getPayload()).to.be.equal("ciao");
+        resolve(msg.getPayload());
       });
       // resolve the promise after some time as we don't know which one will response
       setTimeout(() => resolve(""), 200);
     });
 
     const msg2 = new Promise(resolve => {
-      client2b.observe("greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
-        resolve(msg.payload);
+      client2b.observe("server.greetings", msg => {
+        expect(msg.getPayload()).to.be.equal("ciao");
+        resolve(msg.getPayload());
       });
       // resolve the promise after some time as we don't know which one will response
       setTimeout(() => resolve(""), 200);

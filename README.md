@@ -8,6 +8,8 @@ so that `client services` can **invoke** them remotely.
 Each **paip** service must provide a service name and an optional namespace. All the subjects exposed by that service
 will be namespaced under **[NAMESPACE.]SERVICE_NAME**
 
+All the messages broadcasted will be namespaced under **[NAMESPACE.]SERVICE_NAME**.
+
 # API
 
 ## CONSTRUCTOR
@@ -126,7 +128,7 @@ The function returns a Promise that resolves with just the result of the remote 
 the remote method threw any error or if there was any error sending /receiving the messages .
 
 ## BROADCAST
-A service can publish a message without expecting any reply:
+A service can broadcast a message without expecting any reply:
 
 `paip.broadcast(subject, payload, metadata)`
 
@@ -140,6 +142,7 @@ The function returns a Promise that resolves with no result or reject if any err
 
 **NOTE**
 message sent via broadcast will have request.async === true, to indicate this is an asynchronous request.
+Also their subject will be prepended with **[NAMESPACE.]SERVICE_NAME**.
 
 # MESSAGES
 
