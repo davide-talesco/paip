@@ -108,7 +108,7 @@ experiment("broadcast api", () => {
   test("send a broadcast message", async () => {
     const msg1 = new Promise(resolve => {
       client.observe("server.greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
+        expect(msg.getPayload()).to.be.equal("ciao");
         resolve();
       });
     });
@@ -122,7 +122,7 @@ experiment("broadcast api", () => {
   test("send a broadcast message with metadata", async () => {
     const msg1 = new Promise(resolve => {
       client.observe("server.greetings", msg => {
-        expect(msg.metadata).to.be.equal({ index: 1 });
+        expect(msg.getMetadata()).to.be.equal({ index: 1 });
         resolve();
       });
     });
@@ -201,14 +201,14 @@ experiment("observe api", () => {
   test("2 separate service observing the same subject they both get it", async () => {
     const msg1 = new Promise(resolve => {
       client.observe("server.greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
+        expect(msg.getPayload()).to.be.equal("ciao");
         resolve();
       });
     });
 
     const msg2 = new Promise(resolve => {
       client2.observe("server.greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
+        expect(msg.getPayload()).to.be.equal("ciao");
         resolve();
       });
     });
@@ -221,8 +221,8 @@ experiment("observe api", () => {
   test("2 instances of the same service observing a subject only one will get it", async () => {
     const msg1 = new Promise(resolve => {
       client2.observe("server.greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
-        resolve(msg.payload);
+        expect(msg.getPayload()).to.be.equal("ciao");
+        resolve(msg.getPayload());
       });
       // resolve the promise after some time as we don't know which one will response
       setTimeout(() => resolve(""), 200);
@@ -230,8 +230,8 @@ experiment("observe api", () => {
 
     const msg2 = new Promise(resolve => {
       client2b.observe("server.greetings", msg => {
-        expect(msg.payload).to.be.equal("ciao");
-        resolve(msg.payload);
+        expect(msg.getPayload()).to.be.equal("ciao");
+        resolve(msg.getPayload());
       });
       // resolve the promise after some time as we don't know which one will response
       setTimeout(() => resolve(""), 200);

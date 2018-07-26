@@ -459,7 +459,7 @@ const IncomingMessage = stampit({
     }
   ],
   methods: {
-    getPayload: function(){
+    getPayload: function getPayload(){
       return this.payload
     },
     getMetadata: function getMetadata(path){
@@ -467,9 +467,18 @@ const IncomingMessage = stampit({
       // make sure it works also if user specify just a string
       path = _.castArray(path);
       return R.path(path, this.metadata);
+    },
+    getService : function getService() {
+      return this.service;
+    },
+    getTime : function getTime() {
+      return this.time;
+    },
+    getSubject : function getSubject(){
+      return this.subject
     }
   }
-});
+}).compose(Privatize);
 
 const BroadcastMessage = stampit({
   initializers: [
@@ -490,8 +499,9 @@ const BroadcastMessage = stampit({
 });
 
 const IncomingRequest = stampit.init(function({ paip, request}){
-  //if (request) {_.extend(this, request)};
+
   const that = _.cloneDeep(request);
+
   assert(paip, "paip must exists in Request object");
   assert(request, "request must exists in Request object");
 
@@ -528,6 +538,18 @@ const IncomingRequest = stampit.init(function({ paip, request}){
 
   this.getTransactionId = function getTransactionId() {
     return that.tx;
+  };
+
+  this.getService = function getTransactionId() {
+    return that.service;
+  };
+
+  this.getTime = function getTransactionId() {
+    return that.time;
+  };
+
+  this.getSubject = function(){
+    return that.subject
   };
 
   this.invoke = function invoke(request) {
