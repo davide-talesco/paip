@@ -18,18 +18,21 @@ const isMessage = function(message){
 const Message = stampit({
   initializers: [
     function({ subject,  metadata = {}, tx, service,  time }) {
-      assert(subject, "subject is required to create a Request object");
-      assert(service, "service is required to create a Request object");
-
-      this.subject = subject;
+      assert(subject, "subject is required to create a Message object");
+      assert(service, "service is required to create a Message object");
 
       this.tx = tx || uuidv4();
-      this.service = service;
       this.time = time || new Date();
       this.metadata = metadata;
+      this.service = service;
+      this.subject = subject;
     }
   ],
   methods: {
+    get: function(){
+      return JSON.parse(JSON.stringify(this))
+    },
+
     getSubject: function(){ return this.subject },
 
     setSubject: function(subject) {
@@ -87,7 +90,7 @@ const isRequest = function(request){
 };
 
 // generic request Constructor
-const Request = stampit({
+const Request = stampit(Message, {
   initializers: [
     function({ args = []}){
       this.args = _.castArray(args);
@@ -103,7 +106,7 @@ const Request = stampit({
       return this;
     }
   }
-}).compose(Message);
+});
 
 const IncomingRequest = function(nats, service, rawRequest){
   // build the request
@@ -144,7 +147,7 @@ const isIncomingResponse = function(response){
   }
 };
 
-const Response = stampit({
+const Response = stampit(Message, {
   initializers: [
     function({ error, payload, to }){
       if (error) {
@@ -171,7 +174,7 @@ const Response = stampit({
       throw Errio.fromObject(this.error);
     }
   }
-}).compose(Message);
+})
 
 const IncomingResponse = function(nats, service, rawResponse){
   // build the response
@@ -203,6 +206,7 @@ const isNotice = function(notice){
   try {
     isMessage(notice);
     assert(notice.payload, 'payload is required in Notice');
+    assert(notice.isPaipNotice, 'isPaipNotice is required in Notice');
 
     return true
   }
@@ -212,20 +216,22 @@ const isNotice = function(notice){
   }
 };
 
-const Notice = stampit({
+const Notice = stampit(Message, {
   initializers: [
-    function({ payload }) {
-
-      this.payload = payload;
+    function({ subject, payload, service }) {
 
       assert(payload, "payload is required to create a Notice object");
+      this.payload = payload;
+      // namespace notice messages under service namespace
+      this.subject = service + '.' + subject;
 
+      this.isPaipNotice = true;
     }
   ],
   methods: {
     getPayload: function() { return _.cloneDeep(this.payload)}
   }
-}).compose(Message);
+});
 
 const IncomingNotice = function(nats, service, rawNotice){
   // build the notice
@@ -251,7 +257,7 @@ const IncomingNotice = function(nats, service, rawNotice){
     });
   };
 
-  return notice;
+  return incomingNotice;
 };
 
 const Nats = stampit({
@@ -436,7 +442,7 @@ const Handler = stampit({
   }
 });
 
-const ExposeHandler = stampit({
+const ExposeHandler = stampit(Handler, {
   initializers: [
     function({ subject, fullServiceName }) {
 
@@ -489,7 +495,7 @@ const ExposeHandler = stampit({
             nats.sendResponse(replyTo, outgoingResponse);
 
             // build the subject where to publish service logs
-            const logSubject = service.getFullName() + '.' + "_LOG.EXPOSE" + '.' + that.getSubject();
+            const logSubject = "_LOG.EXPOSE" + '.' + that.getSubject();
 
             // also publish the tuple request response for monitoring
             nats.sendNotice(Notice({
@@ -505,14 +511,13 @@ const ExposeHandler = stampit({
         })
     }
   }
-}).compose(Handler);
+});
 
-const ObserveHandler = stampit({
+const ObserveHandler = stampit(Handler, {
   initializers: [
-    function({ subject }) {
+    function({ subject, fullServiceName }) {
 
       // when observing no need to namespace as we should be free to observe other services subject
-      this.subject = subject;
       this.fullSubject = subject;
 
       // the name of the queue map to the full name of the service + observe to distinguish from expose subscriptions
@@ -556,7 +561,7 @@ const makeSendRequest = (nats, service) =>
         .then(rawResponse => Response(rawResponse))
         .then(rawResponse => {
           // build the subject where to publish service logs
-          const logSubject = service.getFullName() + '.' + "_LOG.REQUEST" + '.' + rawResponse.getSubject();
+          const logSubject = "_LOG.REQUEST" + '.' + rawResponse.getSubject();
 
           // also publish the tuple request response for monitoring
           nats.sendNotice(Notice({
@@ -600,7 +605,6 @@ const Paip = function( options ){
       return _nats.sendNotice(outgoingNotice)
         .then(resolve)
     });
-
   };
 
   // expose subject under service full name to listen for request messages
@@ -660,6 +664,8 @@ const Paip = function( options ){
 };
 
 const msg = {
+
+  get: function(o){ return o.get()},
 
   getSubject: function(o){ return o.getSubject() },
 
