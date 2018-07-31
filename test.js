@@ -1,15 +1,22 @@
-const Paip = require('./index4');
-const S = Paip({ name: 'server', timeout: 5000});
-const C = Paip({ name: 'client', timeout: 5000});
+const {Paip, msg} = require("./index");
+const R = require('ramda');
+const S = Paip({ name: 'server', timeout: 10000});
+const C = Paip({ name: 'client', timeout: 10000});
+const P = Paip({ name: 'proxy', timeout: 10000});
 
-S.expose('test', function(req){
-  throw new Error('sync');
-  return req.getArgs();
+S.expose('test', msg.getArgs);
+
+P.expose('test', function(req){
+  /*  return new Promise((r,rej) => setTimeout(()=> rej(new Error('async')))) */
+  //throw new Error('sync');
+  return req.request({ subject: 'server.test', args: req.getArgs()})
+  // how to avoid calling _.getPayload ?
+    .then(msg.getPayload)
 });
 
-Promise.all([S.ready(), C.ready()])
+Promise.all([S.ready(), C.ready(), P.ready()])
   .then(() => {
-    return C.sendRequest({ subject: 'server.test', args: [5, 3]})
+    return C.request({ subject: 'proxy.test', args: [5, 3]})
   })
   .then(res => {
     console.log(res.getPayload())})

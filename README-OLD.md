@@ -1,25 +1,20 @@
 # PAIP
 
 **PAIP** (read pipe) is a lightweight microservice toolkit built around NATS and let `server services` **expose** local methods on NATS subjects
-so that `client services` can **send request** to them remotely. You can also define `middleware services` that proxy incoming request to backend services
-and proxy the response back to the caller.
+so that `client services` can **invoke** them remotely.
 
-`paip services` can also **send** `notice` message and **observe** `notice`
+`paip services` can also **broadcast** `messages` and **observe** `messages`
 
 Each **paip** service must provide a service name and an optional namespace. All the subjects exposed by that service
 will be namespaced under **[NAMESPACE.]SERVICE_NAME**
 
-All the 'notice' message will also be namespaced under **[NAMESPACE.]SERVICE_NAME**.
+All the messages broadcasted will be namespaced under **[NAMESPACE.]SERVICE_NAME**.
 
 # API
 
 ## CONSTRUCTOR
 
-```javascript
-const paip = require('paip').paip;
-
-const service = paip(options);
-```
+`const paip = Paip(options)`
 
 ### OPTIONS 
 
@@ -29,7 +24,7 @@ Property Name | Type | Required |  Default | Description
 `namespace` | string | **false** | '' | this is the base name space for the service
 `nats` | url or url, url or [url] | **false** | {} | this is the node-nats connection url. it can be a single url, a comma separated url or an array of url ["nats://localhost:4222", "nats://localhost:4223"] https://github.com/nats-io/node-nats
 `timeout` | number | **false** | 25000 | this is the milliseconds paip wait before declaring a request timed out
-`log` | string | **false** | info | valid values are off, info, debug
+`logLevel` | string | **false** | info | valid values are off, info, debug
 
 #### Environment Variables
 
@@ -41,23 +36,11 @@ name | `PAIP_NAME` |
 namespace | `PAIP_NAMESPACE` | 
 nats | `PAIP_NATS` | 
 timeout | `PAIP_TIMEOUT` | 
-log | `PAIP_LOG` | 
+logLevel | `PAIP_LOG_LEVEL` | 
 
 If both are passed environment variables have precedence and will overwrite the value passed programmatically.
 
-*Note* PAIP_NATS should be stringified
-
-
-
-
-
-
-
-
-
-
-
-
+*Note* PAIP_NATS should be stringified as it is an object
 
 ## NATS Socket Connection Reference (for connection error handling)
 
