@@ -272,7 +272,7 @@ handlers, which is probably not what you want.
 If 2 instance of the same service are running, they will load balance the requests. (2 services are considered the same 
 if they have the same namespace and name property)
 
-## observe
+### observe
 **PAIP** can also observe messages passively, without interacting with the caller.
  
 `paip.observe(subject, handler)`
@@ -292,7 +292,7 @@ client.observe('server.login', function(notice){
 })
 ```
 
-## sendRequest
+### sendRequest
 
 With sendRequest a service can execute a remote method exposed over nats:
  
@@ -300,7 +300,7 @@ With sendRequest a service can execute a remote method exposed over nats:
 
 This method return a Promise that fulfills with a Response object.
 
-## sendNotice
+### sendNotice
 
 With sendRequest a service can execute a remote method exposed over nats:
  
@@ -312,14 +312,14 @@ This method return a Promise that fulfills with a Response object.
 Please note the subject of the request gets namespaced after the service full name as we want to avoid a service to 
 send notice regarding some other service namespace.
 
-## ready
+### ready
 
 Observe and expose do only register locally the handlers, only when you call the ready method paip will initialize nats 
 connection and subscribe all handlers.
 
 This method return a promise that fulfills only when all handlers are subscribed to nats.
 
-## shutdown
+### shutdown
 
 This method flush paip cache and shutdown the paip service. It returns a promise that fulfill once the shutdown has completed.
 
@@ -373,3 +373,11 @@ async function boot(){
 
 boot();
 ```
+
+## Tests
+
+run `npm test` to run the tests. You will need to have nats running on localhost on default port 4222.
+
+Run the below command to spin up an instance of nats docker image, run the tests and remove the nats container:
+
+`docker run -d --name nats -p 4222:4222 nats; npm test; docker rm -f nats;`
