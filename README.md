@@ -380,4 +380,4 @@ run `npm test` to run the tests. You will need to have nats running on localhost
 
 Run the below command to spin up an instance of nats docker image, run the tests and remove the nats container:
 
-`docker run -d --name nats -p 4222:4222 nats; npm test; docker rm -f nats;`
+`docker run -d --name paip_nats -p 4222:4222 nats; npm test; docker rm -f paip_nats;`
