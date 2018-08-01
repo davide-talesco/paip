@@ -12,7 +12,7 @@ const experiment = lab.experiment;
 const test = lab.test;
 
 // some tests relay on time and this might cause tests to fail if nats is too slow to respond.
-const delay = 1000;
+const delay = 200;
 
 experiment("send Request API:", () => {
   const server = Paip({ name: "server", log: "off" });
@@ -272,17 +272,18 @@ experiment('observe API:', ()=> {
     await new Promise(r => setTimeout(() => r(), delay));
     expect(count).to.be.equal(1)
 
+    await client2.shutdown();
   });
   test('multiple different services will all get the notice message', async()=>{
     const client2 = Paip({ name: "client2", log: "off" });
 
     var count = 0;
 
-    client.observe("server.echo", function(){
+    client.observe("server.echo2", function(){
       ++count;
     });
 
-    client2.observe("server.echo", function(){
+    client2.observe("server.echo2", function(notice){
       ++count;
     });
 
@@ -290,12 +291,13 @@ experiment('observe API:', ()=> {
     await client.ready();
     await client2.ready();
 
-    await server.notice({ subject: "echo", payload: {} });
+    server.notice({ subject: "echo2", payload: {} })
 
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
     expect(count).to.be.equal(2)
 
+    await client2.shutdown();
   });
   test('request message does not trigger observed method', async()=>{
     var count = 0;
@@ -390,6 +392,7 @@ experiment('transaction Id:', ()=> {
     await client.ready();
 
     const res = await server.notice({ subject: 'notice', payload: {}, tx: 1 });
+
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
     expect(tx).to.be.equal(1);
@@ -454,23 +457,13 @@ experiment('transaction Id:', ()=> {
 });
 
 experiment('log notice messages:', ()=>{
-  var server;
-  var client;
 
-  lab.beforeEach(async () => {
-    server = Paip({ name: "server", log: "off" });
-    client = Paip({ name: "client", log: "off" });
-  });
-
-  lab.afterEach(async () => {
-    await server.shutdown();
-    await client.shutdown();
-  });
-
-  test.only('exposed method generates <SERVICE_FULLNAME>._LOG.EXPOSE.<METHOD_SUBJECT>', async()=>{
+  test('exposed method generates <SERVICE_FULLNAME>._LOG.EXPOSE.<METHOD_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off" });
+    const client = Paip({ name: "client", log: "off" });
 
     var expectedLog = {
-      "subject": "server._LOG.EXPOSE.echo",
+      "subject": "server.__EXPOSE__.echo",
       "metadata": {},
       "service": "server",
       "payload": {
@@ -494,47 +487,135 @@ experiment('log notice messages:', ()=>{
       'isPaipNotice': true
     };
 
-
-    var actualLog = {
-      metadata: {},
-      service: 'server',
-      subject: 'server.server._LOG.EXPOSE.echo',
-      payload:
-        { request:
-            { metadata: {},
-              service: 'client',
-              subject: 'server.echo',
-              args: [],
-              isPaipRequest: true },
-          response:
-            { metadata: {},
-              service: 'server',
-              subject: 'server.echo',
-              statusCode: 200,
-              payload: 1,
-              to: 'client',
-              isPaipResponse: true } },
-      isPaipNotice: true }
+    var actualLog = {};
 
     server.expose('echo', function(r){
       return 1
     });
 
-    await server.ready();
-    await client.ready();
-
-    const res = await client.request({ subject: 'server.echo' });
-
-    server.observe('server._LOG.EXPOSE.echo', function(notice){
+    client.observe('server.__EXPOSE__.echo', function(notice){
       // clean up log from random properties
       actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx']);
     });
 
+    await server.ready();
+    await client.ready();
+
+    await client.request({ subject: 'server.echo' });
+
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
-    expect(expectedLog).to.be.equal(actualLog);
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
+  });
+  test('request generates <SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off" });
+    const client = Paip({ name: "client", log: "off" });
+
+    var expectedLog = {
+      "metadata": {},
+      "service": "client",
+      "subject": "client.__REQUEST__.server.echo",
+      "payload": {
+        "request": {
+          "metadata": {},
+          "service": "client",
+          "subject": "server.echo",
+          "args": [],
+          "isPaipRequest": true
+        },
+        "response": {
+          "metadata": {},
+          "service": "server",
+          "subject": "server.echo",
+          "statusCode": 200,
+          "payload": 1,
+          "to": "client",
+          "isPaipResponse": true
+        }
+      },
+      "isPaipNotice": true
+    }
+
+
+    var actualLog = {};
+
+    server.expose('echo', function(r){
+      return 1
+    });
+
+    server.observe('client.__REQUEST__.server.echo', function(notice){
+      // clean up log from random properties
+      actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx']);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await client.request({ subject: 'server.echo' });
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
 
   });
-  test('request generates <SERVICE_FULLNAME>._LOG.REQUEST.<REQUEST_SUBJECT>');
-  test('request generates <SERVICE_FULLNAME>._LOG.REQUEST.<REQUEST_SUBJECT>');
+  test.only('request time out generates <SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+    const client = Paip({ name: "client", log: "off", timeout: 100 });
+
+    var expectedLog = {
+      "metadata": {},
+      "service": "client",
+      "subject": "client.__REQUEST__.unknown",
+      "payload": {
+        "request": {
+          "metadata": {},
+          "service": "client",
+          "subject": "unknown",
+          "args": [],
+          "isPaipRequest": true
+        },
+        "response": {
+          "metadata": {},
+          "service": "client",
+          "subject": "unknown",
+          "error": {
+            "name": "NatsError",
+            "message": "The request timed out for subscription id: -1",
+            "code": "REQ_TIMEOUT",
+            "statusCode": 500
+          },
+          "statusCode": 500,
+          "to": "client",
+          "isPaipResponse": true
+        }
+      },
+      "isPaipNotice": true
+    }
+
+    var actualLog = {};
+
+    client.observe('client.__REQUEST__.unknown', function(notice){
+      // clean up log from random properties
+      actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.response.error.stack']);
+    });
+
+    await client.ready();
+
+    try {
+      await client.request({ subject: 'unknown' }).then(r => r.getPayload())
+    }catch(e){
+      expect(e).to.be.an.error()
+    }
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await client.shutdown();
+  });
 });

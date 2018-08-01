@@ -1,26 +1,15 @@
 const {Paip, msg} = require("./index");
+const Code = require('code');
+const expect = Code.expect;
 const _ = require('lodash');
-const server = Paip({ name: "server", log: "off" });
-const client = Paip({ name: "client", log: "off" });
 
-server.expose('echo', function(r){
-  return 1
-});
-
-server.observe('server._LOG.EXPOSE.echo', function(notice){
-  const n = notice.get();
-  console.log(notice.getSubject());
-  const clean = _.omit(n, ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx'])
-  console.log(clean)
-});
+const client = Paip({ name: "client", log: "off", timeout: 1000 });
 
 async function boot(){
 
-  await server.ready();
   await client.ready();
 
-  const res = await client.request({ subject: 'server.echo' });
-
+  expect( await client.request({ subject: 'unknown' }).then(r => r.getPayload())).to.throw()
 }
 
 boot();

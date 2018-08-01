@@ -8,6 +8,80 @@ const assert = require('assert');
 const Errio = require("errio");
 Errio.setDefaults({ stack: true });
 
+const Logger = stampit({
+  initializers: [
+    function({ log }) {
+      const LOG_LEVEL_MAP = {
+        off: 60,
+        error: 50,
+        warn: 40,
+        info: 30,
+        debug: 20,
+        trace: 10
+      };
+
+      log = process.env.PAIP_LOG || log;
+
+      this._payload = {};
+
+      if (log) {
+        assert(
+          Object.keys(LOG_LEVEL_MAP).includes(log),
+          `log must be one of [ ${Object.keys(LOG_LEVEL_MAP)} ]`
+        );
+        this.options.logLevel = LOG_LEVEL_MAP[log];
+      }
+    }
+  ],
+  methods: {
+    child() {
+      // children logger should get parent options and parent _.payload
+      const childLogger = Logger(this.options);
+      childLogger.set(this._payload);
+      return childLogger;
+    },
+    trace() {
+      this._payload.level = 10;
+      if (this.options.logLevel <= this._payload.level)
+        console.log(JSON.stringify(this._payload));
+    },
+    debug() {
+      this._payload.level = 20;
+      if (this.options.logLevel <= this._payload.level)
+        console.log(JSON.stringify(this._payload));
+    },
+    info() {
+      this._payload.level = 30;
+      if (this.options.logLevel <= this._payload.level)
+        console.log(JSON.stringify(this._payload));
+    },
+    warn() {
+      this._payload.level = 40;
+      if (this.options.logLevel <= this._payload.level)
+        console.log(JSON.stringify(this._payload));
+    },
+    error(err) {
+      this._payload.level = 50;
+      if (err) this._payload.error = Errio.stringify(err);
+      if (this.options.logLevel <= this._payload.level)
+        console.log(JSON.stringify(this._payload));
+    },
+    set(props) {
+      if (typeof props !== "object") return this;
+      // stamp this object with each property of props
+      Object.keys(props).map(n => (this._payload[n] = props[n]));
+
+      return this;
+    }
+  },
+  props: {
+    options: {
+      // 10 === trace, 20 === debug, 30 === info , 40 === warn, 50 === error
+      logLevel: 30
+    }
+  }
+});
+
 const isMessage = function(message){
   assert(message.subject, 'subject is required in Message');
   assert(message.metadata, 'metadata is required in Message');
@@ -98,7 +172,14 @@ const Request = stampit(Message, {
     }
   ],
   methods: {
+    getSummary: function(){
+      const summary = {};
 
+      summary.service = this.service;
+      summary.subject = this.subject
+
+      return summary;
+    },
     getArgs: function() { return _.cloneDeep(this.args)},
 
     setArgs: function(args) {
@@ -124,11 +205,9 @@ const IncomingRequest = function(nats, service, rawRequest){
   incomingRequest.notice = function(message){
     return new Promise((resolve) => {
       // build outgoing request
-      const outgoingNotice = Notice(_.extend({ service: service.getFullName(), tx: incomingRequest.getTx() }, message));
-
-      return nats.sendNotice(outgoingNotice)
-        .then(resolve)
-    });
+      return resolve(Notice(_.extend({ service: service.getFullName(), tx: incomingRequest.getTx() }, message)));
+    })
+      .then(makeSendNotice(nats, service))
   };
 
   return incomingRequest;
@@ -168,13 +247,21 @@ const Response = stampit(Message, {
     }
   ],
   methods: {
+    getSummary: function(){
+      const summary = {};
+
+      summary.statusCode = this.statusCode;
+      if (this.error) summary.error = _.cloneDeep(this.error);
+
+      return summary
+    },
     getStatusCode : function(){ return this.statusCode },
     getPayload : function(){
       if (this.statusCode === 200) return _.cloneDeep(this.payload);
       throw Errio.fromObject(this.error);
     }
   }
-})
+});
 
 const IncomingResponse = function(nats, service, rawResponse){
   // build the response
@@ -189,14 +276,13 @@ const IncomingResponse = function(nats, service, rawResponse){
     })
       .then(makeSendRequest(nats, service))
   };
+
   incomingResponse.notice = function(message){
     return new Promise((resolve) => {
       // build outgoing notice
-      const outgoingNotice = Notice(_.extend({ service: service.getFullName(), tx: incomingResponse.getTx() }, message));
-
-      return nats.sendNotice(outgoingNotice)
-        .then(resolve)
-    });
+      return resolve(Notice(_.extend({ service: service.getFullName(), tx: incomingResponse.getTx() }, message)));
+    })
+      .then(makeSendNotice(nats, service))
   };
 
   return incomingResponse;
@@ -218,7 +304,7 @@ const isNotice = function(notice){
 
 const Notice = stampit(Message, {
   initializers: [
-    function({ subject, payload, service }) {
+    function({ subject, payload, service,  }) {
 
       assert(payload, "payload is required to create a Notice object");
       this.payload = payload;
@@ -226,9 +312,26 @@ const Notice = stampit(Message, {
       this.subject = service + '.' + subject;
 
       this.isPaipNotice = true;
+    },
+    function({ subject, isPaipNotice  }) {
+
+      // if this is object is already a paipNotice there is no need to namespace the subject once again
+      if (isPaipNotice) {
+        this.subject = subject;
+      }
+
+      this.isPaipNotice = true;
     }
   ],
   methods: {
+    getSummary: function(){
+      const summary = {};
+
+      summary.service = this.service;
+      summary.subject = this.subject;
+
+      return summary
+    },
     getPayload: function() { return _.cloneDeep(this.payload)}
   }
 });
@@ -238,7 +341,7 @@ const IncomingNotice = function(nats, service, rawNotice){
   const incomingNotice = stampit(Notice, Privatize)(rawNotice);
 
   // extend notice with additional methods
-  // TODO
+
   incomingNotice.request = function(request){
     return new Promise((resolve) => {
       // build outgoing request
@@ -250,11 +353,9 @@ const IncomingNotice = function(nats, service, rawNotice){
   incomingNotice.notice = function(message){
     return new Promise((resolve) => {
       // build outgoing notice
-      const outgoingNotice = Notice(_.extend({ service: service.getFullName(), tx: incomingNotice.getTx() }, message));
-
-      return nats.sendNotice(outgoingNotice)
-        .then(resolve)
-    });
+      return resolve(Notice(_.extend({ service: service.getFullName(), tx: incomingNotice.getTx() }, message)));
+    })
+      .then(makeSendNotice(nats, service))
   };
 
   return incomingNotice;
@@ -262,7 +363,8 @@ const IncomingNotice = function(nats, service, rawNotice){
 
 const Nats = stampit({
   initializers: [
-    function({ nats, timeout }) {
+    function({ nats, timeout, logger }) {
+
       nats = process.env.PAIP_NATS || nats;
       timeout = process.env.PAIP_TIMEOUT || timeout;
 
@@ -289,19 +391,24 @@ const Nats = stampit({
       }
 
       if (timeout) this.timeout = timeout;
+
+      this.logger = logger.child({ component: 'Nats' })
     }
   ],
   methods: {
     connect() {
       return new Promise((resolve, reject) => {
+        const logger = this.logger;
 
         this.nats = NATS.connect(this.options);
 
         this.nats.once('connect', function(){
+          logger.child().set({ message: 'connected'}).trace();
           resolve();
         });
 
         this.nats.once('error', function(e){
+          logger.child().set({ message: 'error'}).error(e);
           reject(e);
         });
 
@@ -310,14 +417,19 @@ const Nats = stampit({
     shutdown(){
       return new Promise((resolve, reject) => {
         const nats = this.nats;
+        const logger = this.logger;
+
         nats.flush(function() {
           nats.close();
+          logger.child().set({ message: 'shutdown'}).trace();
           resolve();
         });
       })
     },
     sendRequest(request) {
       return new Promise((resolve, reject) => {
+        const logger = this.logger;
+
         assert(_.isObject(request), 'request must be an object in SendRequest');
         assert(_.isString(request.subject), 'request.subject must be a string in SendRequest');
         this.nats.requestOne(
@@ -328,31 +440,41 @@ const Nats = stampit({
           response => {
             // if response its NATS error throw it so we can wrap it around a paipResponse Object
             if (response instanceof NATS.NatsError) {
+              logger.child().set({ message: 'received response', request, response }).trace();
                reject(response);
             }
+            logger.child().set({ message: 'received response', request, response }).trace();
             return resolve(response);
           }
         );
+        logger.child().set({ message: 'sent Request', request }).trace();
       });
     },
     sendResponse(replyTo, response) {
       return new Promise((resolve, reject) => {
+        const logger = this.logger;
+
         this.nats.publish(replyTo, response, () => {
+          logger.child().set({ message: 'sent Response', response }).trace();
           resolve();
         });
       });
     },
-    sendNotice(message) {
+    sendNotice(notice) {
+      const logger = this.logger;
+
       return new Promise((resolve) => {
-        assert(_.isObject(message), 'message must be an object in sendNotice');
-        assert(_.isString(message.subject), 'message.subject must be a string in sendNotice');
-        this.nats.publish(message.subject, message, () => {
+        assert(_.isObject(notice), 'message must be an object in sendNotice');
+        assert(_.isString(notice.subject), 'message.subject must be a string in sendNotice');
+        this.nats.publish(notice.subject, notice, () => {
+          logger.child().set({ message: 'sent Notice', notice }).trace();
           resolve();
         });
       });
     },
     expose(subject, queue, handler) {
       return new Promise((resolve, reject) => {
+        const logger = this.logger;
 
         const sid = this.nats.subscribe(subject, { queue }, function(
           request,
@@ -367,15 +489,19 @@ const Nats = stampit({
           handler(request, replyTo);
         });
         this.nats.flush(function() {
+          logger.child().set({ message: 'Subscribed Expose Method', subject, queue }).trace();
           resolve(sid);
         });
       })
     },
     observe(subject, queue, handler){
       return new Promise((resolve) => {
+        const logger = this.logger;
+
         const sid =  this.nats.subscribe(subject, { queue }, handler);
 
         this.nats.flush(function() {
+          logger.child().set({ message: 'Subscribed Observe Method', subject, queue }).trace();
           resolve(sid);
         });
       });
@@ -435,6 +561,9 @@ const Handler = stampit({
     }
   ],
   methods: {
+    get: function(){
+      return JSON.parse(JSON.stringify(this))
+    },
     getSubject(){ return this.subject },
     getFullSubject() { return this.fullSubject },
     getQueue(){ return this.queue },
@@ -450,7 +579,7 @@ const ExposeHandler = stampit(Handler, {
       this.fullSubject = fullServiceName + "." + subject;
 
       // the name of the queue map to the full name of the service + expose to distinguish from observe subscriptions
-      this.queue = fullServiceName + "-expose"
+      this.queue = fullServiceName + ".__EXPOSE__"
     }
   ],
   methods: {
@@ -461,6 +590,7 @@ const ExposeHandler = stampit(Handler, {
         // discard any message that is not a paip request
         if (!isRequest(request))
           return;
+        // TODO wrap request in Request interface!
         // we need to build the incomingRequest
         const incomingRequest = IncomingRequest(nats, service, request );
         return Promise.resolve(incomingRequest)
@@ -495,7 +625,7 @@ const ExposeHandler = stampit(Handler, {
             nats.sendResponse(replyTo, outgoingResponse);
 
             // build the subject where to publish service logs
-            const logSubject = "_LOG.EXPOSE" + '.' + that.getSubject();
+            const logSubject = "__EXPOSE__" + '.' + that.getSubject();
 
             // also publish the tuple request response for monitoring
             nats.sendNotice(Notice({
@@ -504,6 +634,18 @@ const ExposeHandler = stampit(Handler, {
               tx: incomingRequest.getTx(),
               service: service.getFullName()
             }));
+
+            // log it to console
+            service.logger.child()
+              .set({ message: 'sent Response'})
+              .set({ request: Request(request).get()})
+              .set({ response: Response(outgoingResponse).get()}).debug();
+
+            // log it to console
+            service.logger.child()
+              .set({ message: 'sent Response'})
+              .set({ request: Request(request).getSummary()})
+              .set({ response: Response(outgoingResponse).getSummary()}).info();
           })
       })
         .then(sid => {
@@ -521,7 +663,7 @@ const ObserveHandler = stampit(Handler, {
       this.fullSubject = subject;
 
       // the name of the queue map to the full name of the service + observe to distinguish from expose subscriptions
-      this.queue = fullServiceName + "-observe"
+      this.queue = fullServiceName + ".__OBSERVE__"
     }
   ],
   methods: {
@@ -536,7 +678,17 @@ const ObserveHandler = stampit(Handler, {
         // pass the request to the handler
           .then(that.handler)
           // discard any kind of handler return values
-          .then(() => {})
+          .then(() => {
+            // log it to console
+            service.logger.child()
+              .set({ message: 'received Notice'})
+              .set({ notice: Notice(notice).get()}).debug();
+
+            // log it to console
+            service.logger.child()
+              .set({ message: 'received Notice'})
+              .set({ notice: Notice(notice).getSummary()}).info();
+          })
           .catch(() => {})
       })
         .then(sid => {
@@ -561,7 +713,7 @@ const makeSendRequest = (nats, service) =>
         .then(rawResponse => Response(rawResponse))
         .then(rawResponse => {
           // build the subject where to publish service logs
-          const logSubject = "_LOG.REQUEST" + '.' + rawResponse.getSubject();
+          const logSubject = "__REQUEST__" + '.' + rawResponse.getSubject();
 
           // also publish the tuple request response for monitoring
           nats.sendNotice(Notice({
@@ -571,18 +723,51 @@ const makeSendRequest = (nats, service) =>
             service: service.getFullName()
           }));
 
+          // log it to console
+          service.logger.child()
+            .set({ message: 'sent Request'})
+            .set({ request: outgoingRequest.get()})
+            .set({ response: rawResponse.get()}).debug();
+
+          // log it to console
+          service.logger.child()
+            .set({ message: 'sent Request'})
+            .set({ request: outgoingRequest.getSummary()})
+            .set({ response: rawResponse.getSummary()}).info();
+
           return IncomingResponse(nats, service, rawResponse)
         })
 };
 
-// this is the only exposed function
-const Paip = function( options ){
+const makeSendNotice = (nats, service) =>
+  outgoingNotice => {
+    return nats.sendNotice(outgoingNotice)
+      .then(() => {
+        // log it to console
+        service.logger.child()
+          .set({ message: 'sent Notice'})
+          .set({ notice: outgoingNotice.get()}).debug();
 
-  // initialize nats Interface
-  const _nats = Nats(options);
+        // log it to console
+        service.logger.child()
+          .set({ message: 'sent Notice'})
+          .set({ notice: outgoingNotice.getSummary()}).info();
+      })
+  };
+
+// this is the only exposed function
+const Paip = function( options = {} ){
 
   // initialize paip service details
   const _service = Service( options );
+
+  const _logger = Logger(options).set({service: _service.getFullName()});
+
+  // extend service with logger
+  _service.logger = _logger;
+
+  // initialize nats Interface extending options with logger
+  const _nats = Nats(_.extend({logger: _logger}, options));
 
   const _exposeHandlers = {};
   const _observeHandlers = {};
@@ -600,11 +785,9 @@ const Paip = function( options ){
   const notice = function(message){
     return new Promise((resolve, reject) => {
       // build outgoing request
-      const outgoingNotice = Notice(_.extend({ service: _service.getFullName() }, message));
-
-      return _nats.sendNotice(outgoingNotice)
-        .then(resolve)
-    });
+      return resolve(Notice(_.extend({ service: _service.getFullName() }, message)))
+    })
+      .then(makeSendNotice(_nats, _service))
   };
 
   // expose subject under service full name to listen for request messages
@@ -631,34 +814,39 @@ const Paip = function( options ){
   const ready = function(){
     return _nats
       .connect()
+      .then(() => _logger.child().set({ message: 'connected to nats'}).info())
       .then(() =>
         Promise.all(
           Object.keys(_exposeHandlers).map(handlerName =>
             // subscribe all expose handlers
             _exposeHandlers[handlerName].expose( _nats, _service)
+              .then(() => _logger.child().set({ message: 'Registered Expose handler', handler:  _exposeHandlers[handlerName].get()}).info())
           )
         )
       )
-      .then(() => {
+      .then(() =>
         Promise.all(
           Object.keys(_observeHandlers).map(handlerName =>
             // subscribe all expose handlers
             _observeHandlers[handlerName].observe(_nats, _service)
+              .then(() => _logger.child().set({ message: 'Registered Observe handler', handler: _observeHandlers[handlerName].get() }).info())
           )
         )
-      })
+      )
+      .then(() => _logger.child().set({ message: 'Paip ready' }).info())
   };
 
   const shutdown = function(){
-    return _nats.shutdown();
+    return _nats.shutdown()
+      .then(() => _logger.child().set({ message: 'Paip shutdown' }).info())
   };
 
   return {
+    expose,
+    observe,
+    ready,
     request,
     notice,
-    observe,
-    expose,
-    ready,
     shutdown
   }
 };
