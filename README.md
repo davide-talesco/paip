@@ -112,7 +112,7 @@ We extract the payload of the response before being able to work on it.
 Please note client.request returns a Promise that only rejects if there was a Nats error, but will resolve even if the remote method threw an error.
 In this case res.getPayload() when executed will throw the original remote error.
 
-Its also important to notice that both the **expose** and the **request** method, will automatically generate a notice log entry under a well known 
+Its also important to notice that both the **expose** and the **sendRequest** method, will automatically generate a notice log entry under a well known 
 formatted subject: 
 
 a notice message whose payload contains both request and response messages will be published under `server.__EXPOSE__.add`;
@@ -136,15 +136,15 @@ Method Name | Input Type | Return Type |  Description
 `getArgs` | N/A | array  | get the args of the request
 `setArgs(args)` | array  | this | set request args
 `getMetadata(path)` | any  | any | Retrieve the value at a given path of the message metadata object. path must be an array of strings ie. get(['requestor', id]) => return message.metadata.requestor.id
-`setMetadata(value)` | any  | Set the metadata property
+`setMetadata(value)` | any  | any | Set the metadata property
 `getTx` | N/A  | string |get the transaction Id of the message
 `setTx` | string  | this | set the transaction Id of the message
 `getService` | N/A  | string | get the service of the message
 `setService` | string  | this | set the service of the message
 `getTime` | N/A  | string | get the time of the message
 `setTime` | date  | this | set the time of the message
-`sendRequest` | Promise(result)  | this is the method to send another request in line with the same transactionId of the incoming message
-`sendNotice` | Promise(result)  | this is the method to send a notice message in line with the same transactionId of the incoming message
+`sendRequest` | request Object | Promise(result)  | this is the method to send another request in line with the same transactionId of the incoming message
+`sendNotice` | notice Object | Promise(result)  | this is the method to send a notice message in line with the same transactionId of the incoming message
 
 #### Incoming Response
 
@@ -154,7 +154,7 @@ Method Name | Input Type | Return Type |  Description
 `getSubject` | N/A | string  | get the subject of the message
 `setSubject` | string | this  | set the subject of the message
 `getMetadata(path)` | any  | any | Retrieve the value at a given path of the message metadata object. path must be an array of strings ie. get(['requestor', id]) => return message.metadata.requestor.id
-`setMetadata(value)` | any  | Set the metadata property
+`setMetadata(value)` | any  | any | Set the metadata property
 `getTx` | N/A  | string |get the transaction Id of the message
 `setTx` | string  | this | set the transaction Id of the message
 `getService` | N/A  | string | get the service of the message
@@ -163,8 +163,8 @@ Method Name | Input Type | Return Type |  Description
 `setTime` | date  | this | set the time of the message
 `getStatusCode` | N/A  | number | get the statusCode of the response
 `getPayload` | N/A  | any | get the payload of the response, throws the remote error if the response is an error
-`sendRequest` | Promise(result)  | this is the method to send another request in line with the same transactionId of the incoming message
-`sendNotice` | Promise(result)  | this is the method to send a notice message in line with the same transactionId of the incoming message
+`sendRequest` | request Object | Promise(result)  | this is the method to send another request in line with the same transactionId of the incoming message
+`sendNotice` | notice Object | Promise(result)  | this is the method to send a notice message in line with the same transactionId of the incoming message
 
 #### Incoming Notice
 
@@ -174,7 +174,7 @@ Method Name | Input Type | Return Type |  Description
 `getSubject` | N/A | string  | get the subject of the message
 `setSubject` | string | this  | set the subject of the message
 `getMetadata(path)` | any  | any | Retrieve the value at a given path of the message metadata object. path must be an array of strings ie. get(['requestor', id]) => return message.metadata.requestor.id
-`setMetadata(value)` | any  | Set the metadata property
+`setMetadata(value)` | any  | any | Set the metadata property
 `getTx` | N/A  | string |get the transaction Id of the message
 `setTx` | string  | this | set the transaction Id of the message
 `getService` | N/A  | string | get the service of the message
@@ -182,8 +182,8 @@ Method Name | Input Type | Return Type |  Description
 `getTime` | N/A  | string | get the time of the message
 `setTime` | date  | this | set the time of the message
 `getPayload` | N/A  | any | get the payload of the notice message
-`sendRequest` | Promise(result)  | this is the method to send another request in line with the same transactionId of the incoming message
-`sendNotice` | Promise(result)  | this is the method to send a notice message in line with the same transactionId of the incoming message
+`sendRequest` | request Object | Promise(result)  | this is the method to send another request in line with the same transactionId of the incoming message
+`sendNotice` | notice Object | Promise(result)  | this is the method to send a notice message in line with the same transactionId of the incoming message
 
 All set methods return the request object so they can be chained.
 
