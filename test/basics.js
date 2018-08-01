@@ -31,7 +31,7 @@ experiment("send Request API:", () => {
 
   test('send a request with no subject', async () => {
     try{
-      await client.request({ args: [5, 4] });
+      await client.sendRequest({ args: [5, 4] });
       fail('This should never be executed');
     }
     catch(e){
@@ -39,11 +39,11 @@ experiment("send Request API:", () => {
     }
   });
   test('send a request with args not an array', async () => {
-    const res = await client.request({ subject: "server.echo", args: 5 });
+    const res = await client.sendRequest({ subject: "server.echo", args: 5 });
     expect(res.getPayload()).to.equal([5]);
   });
   test('send a simple request', async () => {
-    const res = await client.request({ subject: "server.echo", args: [5, 4] });
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
     expect(res.getPayload()).to.equal([5, 4]);
   });
 });
@@ -69,7 +69,7 @@ experiment('expose API:', ()=> {
     await server.ready();
     await client.ready();
 
-    const res = await client.request({ subject: "server.echo", args: [5, 4] });
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
     expect(res.getPayload()).to.equal([5, 4]);
 
   });
@@ -80,7 +80,7 @@ experiment('expose API:', ()=> {
     await server.ready();
     await client.ready();
 
-    const res = await client.request({ subject: "server.echo", args: [5, 4] });
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
     expect(res.getPayload()).to.equal([5, 4]);
 
   });
@@ -91,7 +91,7 @@ experiment('expose API:', ()=> {
     await server.ready();
     await client.ready();
 
-    const res = await client.request({ subject: "server.echo", args: [5, 4] });
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
     expect(() => res.getPayload()).to.throw('sync')
 
   });
@@ -102,7 +102,7 @@ experiment('expose API:', ()=> {
     await server.ready();
     await client.ready();
 
-    const res = await client.request({ subject: "server.echo", args: [5, 4] });
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
     expect(() => res.getPayload()).to.throw('async')
 
   });
@@ -113,7 +113,7 @@ experiment('expose API:', ()=> {
     await server.ready();
     await client.ready();
 
-    const res = await client.request({ subject: "server.echo", args: [5, 4], metadata: 'test' });
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4], metadata: 'test' });
     expect(res.getPayload()).to.equal('test');
 
   });
@@ -124,7 +124,7 @@ experiment('expose API:', ()=> {
     await server.ready();
     await client.ready();
 
-    const res = await client.request({ subject: "server.echo", args: [5, 4], tx: 'test' });
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4], tx: 'test' });
     expect(res.getTx()).to.equal('test');
 
   });
@@ -145,12 +145,12 @@ experiment('expose API:', ()=> {
     await client.ready();
 
     // send multiple request just to be sure
-    await client.request({ subject: "server.echo", args: [5, 4] });
-    await client.request({ subject: "server.echo", args: [5, 4] });
-    await client.request({ subject: "server.echo", args: [5, 4] });
-    await client.request({ subject: "server.echo", args: [5, 4] });
-    await client.request({ subject: "server.echo", args: [5, 4] });
-    await client.request({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
 
     expect(count).to.equal(6);
 
@@ -166,9 +166,9 @@ experiment('expose API:', ()=> {
     await server.ready();
     await client.ready();
 
-    await server.notice({ subject: "echo", payload: {} })
-    await server.notice({ subject: "echo", payload: {} })
-    await server.notice({ subject: "echo", payload: {} })
+    await server.sendNotice({ subject: "echo", payload: {} })
+    await server.sendNotice({ subject: "echo", payload: {} })
+    await server.sendNotice({ subject: "echo", payload: {} })
 
     expect(count).to.be.equal(0)
   });
@@ -197,7 +197,7 @@ experiment('send Notice API:', ()=> {
     await server.ready();
     await client.ready();
 
-    await server.notice({ subject: "echo", payload: 1 })
+    await server.sendNotice({ subject: "echo", payload: 1 })
 
   });
   test('send a notice with no payload', async()=>{
@@ -206,7 +206,7 @@ experiment('send Notice API:', ()=> {
     await client.ready();
 
     try{
-      await server.notice({ subject: "echo" })
+      await server.sendNotice({ subject: "echo" })
     }catch(e){
       expect(e).to.be.an.error('payload is required to create a Notice object')
     }
@@ -217,7 +217,7 @@ experiment('send Notice API:', ()=> {
     await client.ready();
 
     try{
-      await server.notice({ payload: {} })
+      await server.sendNotice({ payload: {} })
     }catch(e){
       expect(e).to.be.an.error('subject is required to create a Message object')
     }
@@ -247,7 +247,7 @@ experiment('observe API:', ()=> {
     await server.ready();
     await client.ready();
 
-    await server.notice({ subject: "echo", payload: {}, metadata: 1 })
+    await server.sendNotice({ subject: "echo", payload: {}, metadata: 1 })
   });
   test('multiple instance of the same service will load balance observed notice messages', async()=>{
     const client2 = Paip({ name: "client", log: "off" });
@@ -266,7 +266,7 @@ experiment('observe API:', ()=> {
     await client.ready();
     await client2.ready();
 
-    await server.notice({ subject: "echo", payload: {} });
+    await server.sendNotice({ subject: "echo", payload: {} });
 
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
@@ -291,7 +291,7 @@ experiment('observe API:', ()=> {
     await client.ready();
     await client2.ready();
 
-    server.notice({ subject: "echo2", payload: {} })
+    server.sendNotice({ subject: "echo2", payload: {} })
 
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
@@ -313,7 +313,7 @@ experiment('observe API:', ()=> {
     await server.ready();
     await client.ready();
 
-    await client.request({ subject: 'server.echo' });
+    await client.sendRequest({ subject: 'server.echo' });
 
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
@@ -340,7 +340,7 @@ experiment('transaction Id:', ()=> {
     const proxy = Paip({ name: 'proxy', log: 'off'});
 
     proxy.expose('echo', function(r){
-      return r.request({ subject: 'server.echo', args: r.getTx()})
+      return r.sendRequest({ subject: 'server.echo', args: r.getTx()})
     });
 
     server.expose('echo', function(r){
@@ -353,7 +353,7 @@ experiment('transaction Id:', ()=> {
     await proxy.ready();
     await client.ready();
 
-    const res = await client.request({ subject: 'proxy.echo', tx: 1 });
+    const res = await client.sendRequest({ subject: 'proxy.echo', tx: 1 });
     expect(res.getPayload()).to.be.equal([1, 1]);
 
     await proxy.shutdown()
@@ -362,7 +362,7 @@ experiment('transaction Id:', ()=> {
     var tx;
 
     server.expose('echo', async function(r){
-      r.notice({ subject: 'notice', payload: r.getTx()})
+      r.sendNotice({ subject: 'notice', payload: r.getTx()})
     });
 
     client.observe('server.notice', function(notice){
@@ -372,7 +372,7 @@ experiment('transaction Id:', ()=> {
     await server.ready();
     await client.ready();
 
-    const res = await client.request({ subject: 'server.echo', tx: 1 });
+    const res = await client.sendRequest({ subject: 'server.echo', tx: 1 });
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
     expect(tx).to.be.equal(1);
@@ -385,13 +385,13 @@ experiment('transaction Id:', ()=> {
     });
 
     client.observe('server.notice', async function(notice){
-      await notice.request({ subject: 'server.echo'})
+      await notice.sendRequest({ subject: 'server.echo'})
     });
 
     await server.ready();
     await client.ready();
 
-    const res = await server.notice({ subject: 'notice', payload: {}, tx: 1 });
+    const res = await server.sendNotice({ subject: 'notice', payload: {}, tx: 1 });
 
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
@@ -405,13 +405,13 @@ experiment('transaction Id:', ()=> {
     });
 
     client.observe('server.notice', async function(notice){
-      await notice.notice({ subject: 'notice', payload: {}})
+      await notice.sendNotice({ subject: 'notice', payload: {}})
     });
 
     await server.ready();
     await client.ready();
 
-    const res = await server.notice({ subject: 'notice', payload: {}, tx: 1 });
+    const res = await server.sendNotice({ subject: 'notice', payload: {}, tx: 1 });
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
     expect(tx).to.be.equal(1);
@@ -426,8 +426,8 @@ experiment('transaction Id:', ()=> {
     await server.ready();
     await client.ready();
 
-    const res = await client.request({ subject: 'server.echo', tx: 1 });
-    await res.request({ subject: 'server.echo'});
+    const res = await client.sendRequest({ subject: 'server.echo', tx: 1 });
+    await res.sendRequest({ subject: 'server.echo'});
 
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
@@ -447,8 +447,8 @@ experiment('transaction Id:', ()=> {
     await server.ready();
     await client.ready();
 
-    const res = await client.request({ subject: 'server.echo', tx: 1 });
-    await res.notice({ subject: 'echo', payload: {}});
+    const res = await client.sendRequest({ subject: 'server.echo', tx: 1 });
+    await res.sendNotice({ subject: 'echo', payload: {}});
 
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
@@ -501,7 +501,7 @@ experiment('log notice messages:', ()=>{
     await server.ready();
     await client.ready();
 
-    await client.request({ subject: 'server.echo' });
+    await client.sendRequest({ subject: 'server.echo' });
 
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
@@ -554,7 +554,7 @@ experiment('log notice messages:', ()=>{
     await server.ready();
     await client.ready();
 
-    await client.request({ subject: 'server.echo' });
+    await client.sendRequest({ subject: 'server.echo' });
 
     // TODO can I avoid to base this test on time?
     await new Promise(r => setTimeout(() => r(), delay));
@@ -564,7 +564,7 @@ experiment('log notice messages:', ()=>{
     await client.shutdown();
 
   });
-  test.only('request time out generates <SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+  test('request time out generates <SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
     const client = Paip({ name: "client", log: "off", timeout: 100 });
 
     var expectedLog = {
@@ -607,7 +607,7 @@ experiment('log notice messages:', ()=>{
     await client.ready();
 
     try {
-      await client.request({ subject: 'unknown' }).then(r => r.getPayload())
+      await client.sendRequest({ subject: 'unknown' }).then(r => r.getPayload())
     }catch(e){
       expect(e).to.be.an.error()
     }

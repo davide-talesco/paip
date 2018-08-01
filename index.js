@@ -194,7 +194,7 @@ const IncomingRequest = function(nats, service, rawRequest){
   const incomingRequest = stampit(Request, Privatize)(rawRequest);
 
   // extend request with additional methods
-  incomingRequest.request = function(request){
+  incomingRequest.sendRequest = function(request){
     return new Promise((resolve) => {
       // build outgoing request
       return resolve(Request(_.extend({ service: service.getFullName(), tx: incomingRequest.getTx() }, request)));
@@ -202,7 +202,7 @@ const IncomingRequest = function(nats, service, rawRequest){
       .then(makeSendRequest(nats, service))
   };
 
-  incomingRequest.notice = function(message){
+  incomingRequest.sendNotice = function(message){
     return new Promise((resolve) => {
       // build outgoing request
       return resolve(Notice(_.extend({ service: service.getFullName(), tx: incomingRequest.getTx() }, message)));
@@ -269,7 +269,7 @@ const IncomingResponse = function(nats, service, rawResponse){
 
   // extend response with additional methods
   // TODO
-  incomingResponse.request = function(request){
+  incomingResponse.sendRequest = function(request){
     return new Promise((resolve) => {
       // build outgoing request
       return resolve(Request(_.extend({ service: service.getFullName(), tx: incomingResponse.getTx() }, request)));
@@ -277,7 +277,7 @@ const IncomingResponse = function(nats, service, rawResponse){
       .then(makeSendRequest(nats, service))
   };
 
-  incomingResponse.notice = function(message){
+  incomingResponse.sendNotice = function(message){
     return new Promise((resolve) => {
       // build outgoing notice
       return resolve(Notice(_.extend({ service: service.getFullName(), tx: incomingResponse.getTx() }, message)));
@@ -342,7 +342,7 @@ const IncomingNotice = function(nats, service, rawNotice){
 
   // extend notice with additional methods
 
-  incomingNotice.request = function(request){
+  incomingNotice.sendRequest = function(request){
     return new Promise((resolve) => {
       // build outgoing request
       return resolve(Request(_.extend({ service: service.getFullName(), tx: incomingNotice.getTx() }, request)));
@@ -350,7 +350,7 @@ const IncomingNotice = function(nats, service, rawNotice){
       .then(makeSendRequest(nats, service))
   };
 
-  incomingNotice.notice = function(message){
+  incomingNotice.sendNotice = function(message){
     return new Promise((resolve) => {
       // build outgoing notice
       return resolve(Notice(_.extend({ service: service.getFullName(), tx: incomingNotice.getTx() }, message)));
@@ -400,23 +400,41 @@ const Nats = stampit({
       return new Promise((resolve, reject) => {
         const logger = this.logger;
 
-        this.nats = NATS.connect(this.options);
+        this.socket = NATS.connect(this.options);
 
-        this.nats.once('connect', function(){
+        this.socket.once('connect', function(){
           logger.child().set({ message: 'connected'}).trace();
           resolve();
         });
 
-        this.nats.once('error', function(e){
+        this.socket.once('error', function(e){
           logger.child().set({ message: 'error'}).error(e);
           reject(e);
+        });
+
+        this.socket.on('disconnect', function() {
+          logger.child().set({ message: 'disconnected'}).warn();
+        });
+
+        this.socket.on('reconnecting', function() {
+          logger.child().set({ message: 'reconnecting'}).warn();
+        });
+
+        this.socket.on('reconnect', function(nc) {
+          logger.child().set({ message: 'reconnected'}).info();
+        });
+
+        this.socket.on('close', function() {
+          const err = new Error('Unable to reconnect to Nats');
+          logger.child().set({ message: 'reconnected'}).error(err);
+          throw err
         });
 
       });
     },
     shutdown(){
       return new Promise((resolve, reject) => {
-        const nats = this.nats;
+        const nats = this.socket;
         const logger = this.logger;
 
         nats.flush(function() {
@@ -432,7 +450,7 @@ const Nats = stampit({
 
         assert(_.isObject(request), 'request must be an object in SendRequest');
         assert(_.isString(request.subject), 'request.subject must be a string in SendRequest');
-        this.nats.requestOne(
+        this.socket.requestOne(
           request.subject,
           request,
           {},
@@ -454,7 +472,7 @@ const Nats = stampit({
       return new Promise((resolve, reject) => {
         const logger = this.logger;
 
-        this.nats.publish(replyTo, response, () => {
+        this.socket.publish(replyTo, response, () => {
           logger.child().set({ message: 'sent Response', response }).trace();
           resolve();
         });
@@ -466,7 +484,7 @@ const Nats = stampit({
       return new Promise((resolve) => {
         assert(_.isObject(notice), 'message must be an object in sendNotice');
         assert(_.isString(notice.subject), 'message.subject must be a string in sendNotice');
-        this.nats.publish(notice.subject, notice, () => {
+        this.socket.publish(notice.subject, notice, () => {
           logger.child().set({ message: 'sent Notice', notice }).trace();
           resolve();
         });
@@ -476,7 +494,7 @@ const Nats = stampit({
       return new Promise((resolve, reject) => {
         const logger = this.logger;
 
-        const sid = this.nats.subscribe(subject, { queue }, function(
+        const sid = this.socket.subscribe(subject, { queue }, function(
           request,
           replyTo
         ) {
@@ -488,7 +506,7 @@ const Nats = stampit({
           // pass the request to the Paip handler
           handler(request, replyTo);
         });
-        this.nats.flush(function() {
+        this.socket.flush(function() {
           logger.child().set({ message: 'Subscribed Expose Method', subject, queue }).trace();
           resolve(sid);
         });
@@ -498,9 +516,9 @@ const Nats = stampit({
       return new Promise((resolve) => {
         const logger = this.logger;
 
-        const sid =  this.nats.subscribe(subject, { queue }, handler);
+        const sid =  this.socket.subscribe(subject, { queue }, handler);
 
-        this.nats.flush(function() {
+        this.socket.flush(function() {
           logger.child().set({ message: 'Subscribed Observe Method', subject, queue }).trace();
           resolve(sid);
         });
@@ -773,7 +791,7 @@ const Paip = function( options = {} ){
   const _observeHandlers = {};
 
   // send the request at request.subject and return a response object
-  const request = function(request){
+  const sendRequest = function(request){
     return new Promise((resolve, reject) => {
       // build outgoing request
       return resolve(Request(_.extend({ service: _service.getFullName() }, request)));
@@ -782,7 +800,7 @@ const Paip = function( options = {} ){
   };
 
   // send the notice at message.subject, namespaced under service full name and return nothing
-  const notice = function(message){
+  const sendNotice = function(message){
     return new Promise((resolve, reject) => {
       // build outgoing request
       return resolve(Notice(_.extend({ service: _service.getFullName() }, message)))
@@ -845,13 +863,13 @@ const Paip = function( options = {} ){
     expose,
     observe,
     ready,
-    request,
-    notice,
+    sendRequest,
+    sendNotice,
     shutdown
   }
 };
 
-const msg = {
+const utils = {
 
   get: function(o){ return o.get()},
 
@@ -890,5 +908,5 @@ const msg = {
 
 module.exports = {
   Paip: Paip,
-  msg: msg
+  utils: utils
 };
