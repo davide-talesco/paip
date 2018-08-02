@@ -903,7 +903,11 @@ const utils = {
 
   sendRequest: R.curry(function(request, o){ return o.sendRequest(request) }),
 
-  sendNotice: R.curry(function(notice, o){ return o.sendNotice(notice) })
+  sendNotice: R.curry(function(notice, o){ return o.sendNotice(notice) }),
+
+  ready: service => () => service.ready(),
+
+  shutdown: service => () => service.shutdown(),
 };
 
 module.exports = {
