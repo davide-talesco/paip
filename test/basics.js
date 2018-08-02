@@ -1,13 +1,8 @@
-/**
- * Created by davide_talesco on 13/6/18.
- * This file contains the unit tests of paip
- */
-
 "use strict";
 const _ = require("lodash");
-const Paip = require("../index");
+const { Paip, msg } = require("../index");
 const Lab = require("lab");
-const { expect } = require("code");
+const { expect, fail } = require("code");
 
 // Test files must require the lab module, and export a test script
 const lab = (exports.lab = Lab.script());
@@ -16,393 +11,611 @@ const lab = (exports.lab = Lab.script());
 const experiment = lab.experiment;
 const test = lab.test;
 
-experiment("invoke api,", () => {
-  const server = Paip({ name: "server", logLevel: "off" });
-  const client = Paip({ name: "client", logLevel: "off" });
+// some tests relay on time and this might cause tests to fail if nats is too slow to respond.
+const delay = 200;
 
-  lab.before(() => {
-    server.expose("add", function(r) {
-      const [x, y] = r.getArgs();
-      return x + y;
-    });
+experiment("send Request API:", () => {
+  const server = Paip({ name: "server", log: "off" });
+  const client = Paip({ name: "client", log: "off" });
 
-    server.expose("throwSync", function(r) {
-      throw new Error("SyncError");
-    });
-
-    server.expose("throwAsync", function(r) {
-      return new Promise((_, r) => r(new Error("AsyncError")));
-    });
-
-    return new Promise(resolve => setTimeout(resolve, 100));
+  lab.before(async () => {
+    server.expose("echo", r => r.getArgs());
+    await server.ready();
+    await client.ready();
   });
 
-  lab.after(() => {
-    client.close();
-    server.close();
+  lab.after(async () => {
+    await server.shutdown();
+    await client.shutdown();
   });
 
-  test("invoke a remote method", async () => {
-    const res = await client.invoke({ subject: "server.add", args: [5, 4] });
-    expect(res).to.equal(9);
-  });
-
-  test("invoke a remote method with metadata", async () => {
-    const res = await client.invoke({
-      subject: "server.add",
-      args: [5, 4],
-      metadata: { index: 1 }
-    });
-    expect(res).to.equal(9);
-  });
-
-  test("invoke a remote method that throws synchronously", async () => {
-    try {
-      await client.invoke({ subject: "server.throwSync" });
-    } catch (e) {
-      expect(e).to.be.an.error("SyncError");
+  test('send a request with no subject', async () => {
+    try{
+      await client.sendRequest({ args: [5, 4] });
+      fail('This should never be executed');
+    }
+    catch(e){
+      expect(e).to.be.an.error("subject is required to create a Message object");
     }
   });
-
-  test("invoke a remote method that throws asynchronously", async () => {
-    try {
-      await client.invoke({ subject: "server.throwAsync" });
-    } catch (e) {
-      expect(e).to.be.an.error("AsyncError");
-    }
+  test('send a request with args not an array', async () => {
+    const res = await client.sendRequest({ subject: "server.echo", args: 5 });
+    expect(res.getPayload()).to.equal([5]);
   });
-
-  test("invoke with no subject", async () => {
-    try {
-      await client.invoke();
-    } catch (e) {
-      expect(e).to.be.an.error("subject must exists in Request object");
-    }
-  });
-
-  test("invoke with args !== Array", async () => {
-    try {
-      await client.invoke({ subject: "server.add", args: 3 });
-    } catch (e) {
-      expect(e).to.be.an.error(
-        "args if exists must be an Array in Request object"
-      );
-    }
+  test('send a simple request', async () => {
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    expect(res.getPayload()).to.equal([5, 4]);
   });
 });
 
-experiment("broadcast api", () => {
+experiment('expose API:', ()=> {
   var server;
   var client;
 
-  lab.beforeEach(() => {
-    server = Paip({ name: "server", logLevel: "off" });
-    client = Paip({ name: "client", logLevel: "off" });
+  lab.beforeEach(async () => {
+    server = Paip({ name: "server", log: "off" });
+    client = Paip({ name: "client", log: "off" });
   });
 
-  lab.afterEach(() => {
-    client.close();
-    server.close();
+  lab.afterEach(async () => {
+    await server.shutdown();
+    await client.shutdown();
   });
 
-  test("send a broadcast message", async () => {
-    const msg1 = new Promise(resolve => {
-      client.observe("server.greetings", msg => {
-        expect(msg.getPayload()).to.be.equal("ciao");
-        resolve();
-      });
+  test('expose a method that returns synchronously', async () => {
+
+    server.expose("echo", r => r.getArgs());
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    expect(res.getPayload()).to.equal([5, 4]);
+
+  });
+  test('expose a method that returns asynchronously', async () => {
+
+    server.expose("echo", r => new Promise(resolve => setTimeout(() => resolve(r.getArgs()), 100)));
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    expect(res.getPayload()).to.equal([5, 4]);
+
+  });
+  test('expose a method that throws synchronously', async () => {
+
+    server.expose("echo", r => { throw new Error('sync') });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    expect(() => res.getPayload()).to.throw('sync')
+
+  });
+  test('expose a method that throws asynchronously', async () => {
+
+    server.expose("echo", r => new Promise((resolve, reject) => setTimeout(() => reject( new Error('async')), 100)));
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    expect(() => res.getPayload()).to.throw('async')
+
+  });
+  test('receive a request with metadata', async () => {
+
+    server.expose("echo", r => r.getMetadata());
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4], metadata: 'test' });
+    expect(res.getPayload()).to.equal('test');
+
+  });
+  test('receive a request with custom transactionId', async () => {
+
+    server.expose("echo", r => r.getMetadata());
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4], tx: 'test' });
+    expect(res.getTx()).to.equal('test');
+
+  });
+  test('multiple instances of the same service will load balance requests', async()=>{
+    const server2 = Paip({ name: "server", log: "off" });
+
+    var count = 0;
+
+    server.expose("echo", r => {
+      count++;
+    });
+    server2.expose("echo", r => {
+      count++;
     });
 
-    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick doesn't work!) check crap/broadcast-observe-race-condition.js
-    setTimeout(() => server.broadcast("greetings", "ciao"), 100);
+    await server.ready();
+    await server2.ready();
+    await client.ready();
 
-    return Promise.all([msg1]);
+    // send multiple request just to be sure
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+
+    expect(count).to.equal(6);
+
+    await server2.shutdown();
   });
+  test('notice message does not trigger exposed method', async()=>{
+    var count = 0;
 
-  test("send a broadcast message with metadata", async () => {
-    const msg1 = new Promise(resolve => {
-      client.observe("server.greetings", msg => {
-        expect(msg.getMetadata()).to.be.equal({ index: 1 });
-        resolve();
-      });
+    server.expose("echo", function(){
+      count++;
     });
 
-    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick doesn't work!) check crap/broadcast-observe-race-condition.js
-    setTimeout(() => server.broadcast("greetings", "ciao", { index: 1 }), 100);
+    await server.ready();
+    await client.ready();
 
-    return Promise.all([msg1]);
+    await server.sendNotice({ subject: "echo", payload: {} })
+    await server.sendNotice({ subject: "echo", payload: {} })
+    await server.sendNotice({ subject: "echo", payload: {} })
+
+    expect(count).to.be.equal(0)
   });
-
 });
 
-experiment("expose api", () => {
-  const server = Paip({ name: "server", logLevel: "off" });
-  const serverb = Paip({ name: "server", logLevel: "off" });
-  const client = Paip({ name: "client", logLevel: "off" });
-
-  lab.before(() => {
-    server.expose("add", function(r) {
-      const [x, y] = r.getArgs();
-      return x + y;
-    });
-
-    serverb.expose("add", function(r) {
-      const [x, y] = r.getArgs();
-      return x + y;
-    });
-
-    serverb.expose("metadata", function(r) {
-      return r.getMetadata();
-    });
-
-    return new Promise(resolve => setTimeout(resolve, 100));
-  });
-
-  lab.after(() => {
-    client.close();
-    server.close();
-  });
-
-  test("2 instances of the same service exposing a local method only one will receive it", async () => {
-    const res = await client.invoke({ subject: "server.add", args: [5, 4] });
-    expect(res).to.equal(9);
-  });
-
-  test("metadata should be available if provided by caller", async () => {
-    const res = await client.invoke({
-      subject: "server.metadata",
-      args: [5, 4],
-      metadata: { index: 1 }
-    });
-    expect(res).to.equal({ index: 1 });
-  });
-});
-
-experiment("observe api", () => {
+experiment('send Notice API:', ()=> {
   var server;
   var client;
-  var client2;
-  var client2b;
 
-  lab.beforeEach(() => {
-    server = Paip({ name: "server", logLevel: "off" });
-    client = Paip({ name: "client", logLevel: "off" });
-    client2 = Paip({ name: "client2", logLevel: "off" });
-    client2b = Paip({ name: "client2", logLevel: "off" });
+  lab.beforeEach(async () => {
+    server = Paip({ name: "server", log: "off" });
+    client = Paip({ name: "client", log: "off" });
   });
 
-  lab.afterEach(() => {
-    client.close();
-    client2.close();
-    client2b.close();
-    server.close();
+  lab.afterEach(async () => {
+    await server.shutdown();
+    await client.shutdown();
   });
 
-  test("2 separate service observing the same subject they both get it", async () => {
-    const msg1 = new Promise(resolve => {
-      client.observe("server.greetings", msg => {
-        expect(msg.getPayload()).to.be.equal("ciao");
-        resolve();
-      });
+  test('send a simple notice', async()=>{
+
+    client.observe("server.echo", function(notice){
+      expect(notice.getPayload()).to.be.equal(1)
     });
 
-    const msg2 = new Promise(resolve => {
-      client2.observe("server.greetings", msg => {
-        expect(msg.getPayload()).to.be.equal("ciao");
-        resolve();
-      });
-    });
-    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick doesn't work!) check crap/broadcast-observe-race-condition.js
-    setTimeout(() => server.broadcast("greetings", "ciao"), 100);
+    await server.ready();
+    await client.ready();
 
-    return Promise.all([msg1, msg2]);
+    await server.sendNotice({ subject: "echo", payload: 1 })
+
   });
+  test('send a notice with no payload', async()=>{
 
-  test("2 instances of the same service observing a subject only one will get it", async () => {
-    const msg1 = new Promise(resolve => {
-      client2.observe("server.greetings", msg => {
-        expect(msg.getPayload()).to.be.equal("ciao");
-        resolve(msg.getPayload());
-      });
-      // resolve the promise after some time as we don't know which one will response
-      setTimeout(() => resolve(""), 200);
-    });
+    await server.ready();
+    await client.ready();
 
-    const msg2 = new Promise(resolve => {
-      client2b.observe("server.greetings", msg => {
-        expect(msg.getPayload()).to.be.equal("ciao");
-        resolve(msg.getPayload());
-      });
-      // resolve the promise after some time as we don't know which one will response
-      setTimeout(() => resolve(""), 200);
-    });
-    // TODO broadcast msg are not caught by observe run at the same tick. why? (even nextThick doesn't work!) check crap/broadcast-observe-race-condition.js
-    setTimeout(() => server.broadcast("greetings", "ciao"), 100);
+    try{
+      await server.sendNotice({ subject: "echo" })
+    }catch(e){
+      expect(e).to.be.an.error('payload is required to create a Notice object')
+    }
+  });
+  test('send a notice with no subject', async()=>{
 
-    return Promise.all([msg1, msg2]).then(results => {
-      // only one ciao should be received
-      expect(results.reduce((a, b) => a + b, "")).to.be.equal("ciao");
-    });
+    await server.ready();
+    await client.ready();
+
+    try{
+      await server.sendNotice({ payload: {} })
+    }catch(e){
+      expect(e).to.be.an.error('subject is required to create a Message object')
+    }
   });
 });
 
-experiment("transaction ID", () => {
-  const server = Paip({ name: "server", logLevel: "off" });
-  const proxy = Paip({ name: "proxy", logLevel: "off" });
-  const client = Paip({ name: "client", logLevel: "off" });
+experiment('observe API:', ()=> {
+  var server;
+  var client;
 
-  const IDs = [];
+  lab.beforeEach(async () => {
+    server = Paip({ name: "server", log: "off" });
+    client = Paip({ name: "client", log: "off" });
+  });
 
-  lab.before(() => {
-    server.expose("add", function(r) {
-      const [x, y] = r.getArgs();
-      IDs.push(r.getTransactionId());
-      return x + y;
+  lab.afterEach(async () => {
+    await server.shutdown();
+    await client.shutdown();
+  });
+
+  test('observe a notice with metadata', async()=>{
+
+    client.observe("server.echo", function(notice){
+      expect(notice.getMetadata()).to.be.equal(1)
     });
 
-    proxy.expose("add", function(r) {
-      IDs.push(r.getTransactionId());
-      return r.invoke({ subject: "server.add", args: r.getArgs() });
+    await server.ready();
+    await client.ready();
+
+    await server.sendNotice({ subject: "echo", payload: {}, metadata: 1 })
+  });
+  test('multiple instance of the same service will load balance observed notice messages', async()=>{
+    const client2 = Paip({ name: "client", log: "off" });
+
+    var count = 0;
+
+    client.observe("server.echo", function(){
+      ++count;
     });
 
-    return new Promise(resolve => setTimeout(resolve, 100));
-  });
-
-  lab.after(() => {
-    client.close();
-    proxy.close();
-    server.close();
-  });
-
-  test("invoke a remote method from within an exposed local method ", async () => {
-    await client.invoke({ subject: "proxy.add", args: [3, 4] });
-    expect(_.uniq(IDs).length).to.equal(1);
-  });
-});
-
-experiment("transform incoming request properties", () => {
-  const server = Paip({ name: "server", logLevel: "off" });
-  const client = Paip({ name: "client", logLevel: "off" });
-
-  lab.before(() => {
-    server.expose("modifyArgs", function(r) {
-      const [x, y] = r.getArgs();
-      r.setArgs([x, x]);
-      return r.getArgs();
+    client2.observe("server.echo", function(){
+      ++count;
     });
 
-    server.expose("modifyMetadata", function(r) {
-      r.setMetadata(["requestor", "id"], 123);
-      return r.getMetadata();
+    await server.ready();
+    await client.ready();
+    await client2.ready();
+
+    await server.sendNotice({ subject: "echo", payload: {} });
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(count).to.be.equal(1)
+
+    await client2.shutdown();
+  });
+  test('multiple different services will all get the notice message', async()=>{
+    const client2 = Paip({ name: "client2", log: "off" });
+
+    var count = 0;
+
+    client.observe("server.echo2", function(){
+      ++count;
     });
 
-    return new Promise(resolve => setTimeout(resolve, 100));
-  });
-
-  lab.after(() => {
-    client.close();
-    server.close();
-  });
-
-  test("modify args", async () => {
-    expect(
-      await client.invoke({subject: "server.modifyArgs", args: [3, 4]})
-    ).to.equal([3, 3]);
-  });
-
-  test("modify metadata", async()=>{
-    expect(await client.invoke({ subject: "server.modifyMetadata" })).to.equal({
-      requestor: { id: 123 }
+    client2.observe("server.echo2", function(notice){
+      ++count;
     });
 
-    expect(
-      await client.invoke({
-        subject: "server.modifyMetadata",
-        metadata: { requestor: { name: "davide" } }
-      })
-    ).to.equal({ requestor: { name: "davide", id: 123} });
+    await server.ready();
+    await client.ready();
+    await client2.ready();
 
-    expect(
-      await client.invoke({
-        subject: "server.modifyMetadata",
-        metadata: { requestor: { name: "davide", id: { org: 123, id: 123} } }
-      })
-    ).to.equal({ requestor: { name: "davide", id: 123} });
+    server.sendNotice({ subject: "echo2", payload: {} })
 
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(count).to.be.equal(2)
+
+    await client2.shutdown();
+  });
+  test('request message does not trigger observed method', async()=>{
+    var count = 0;
+
+    server.expose('echo', function(){
+      count++;
+    });
+
+    server.observe('server.echo', function(){
+      count++;
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await client.sendRequest({ subject: 'server.echo' });
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(count).to.be.equal(1)
   })
 });
 
-experiment("log messages", () => {
-  const server = Paip({ name: "server", logLevel: "off" });
-  const client = Paip({ name: "client", logLevel: "off", timeout: 500 });
+experiment('transaction Id:', ()=> {
+  var server;
+  var client;
 
-  var serverLog;
-  var clientLog;
-
-  lab.before(() => {
-    server.expose("add", function(r) {
-      const [x, y] = r.getArgs();
-      return x + y;
-    });
-
-    server.expose("throwSync", function(r) {
-      throw new Error("SyncError");
-    });
-
-    server.observe("server._LOG.EXPOSE.>", function(msg) {
-      serverLog = msg.getPayload();
-    });
-
-    client.observe("client._LOG.INVOKE.>", function(msg) {
-      clientLog = msg.getPayload();
-    });
-
-    return new Promise(resolve => setTimeout(resolve, 100));
+  lab.beforeEach(async () => {
+    server = Paip({ name: "server", log: "off" });
+    client = Paip({ name: "client", log: "off" });
   });
 
-  lab.after(() => {
-    client.close();
-    server.close();
+  lab.afterEach(async () => {
+    await server.shutdown();
+    await client.shutdown();
   });
 
-  test("successful response", async () => {
-    await client.invoke({ subject: "server.add", args: [3, 4] });
-    await new Promise(r => setTimeout(r, 200));
-    expect(serverLog.request.args).to.equal([3, 4]);
-    expect(serverLog.response.result).to.equal(7);
-    expect(serverLog.response.statusCode).to.equal(200);
-    // invoke generate similar logs
-    expect(clientLog.request.args).to.equal([3, 4]);
-    expect(clientLog.response.result).to.equal(7);
-    expect(clientLog.response.statusCode).to.equal(200);
-    serverLog = undefined;
-    clientLog = undefined;
-  });
+  test('a request sent via an incomingRequest keep same transaction Id', async () => {
 
-  test("error response", async () => {
+    const proxy = Paip({ name: 'proxy', log: 'off'});
+
+    proxy.expose('echo', function(r){
+      return r.sendRequest({ subject: 'server.echo', args: r.getTx()})
+    });
+
+    server.expose('echo', function(r){
+      const args = r.getArgs();
+      args.push(r.getTx());
+      return args;
+    });
+
+    await server.ready();
+    await proxy.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: 'proxy.echo', tx: 1 });
+    expect(res.getPayload()).to.be.equal([1, 1]);
+
+    await proxy.shutdown()
+  });
+  test('a notice sent via an incomingRequest keep same transaction Id', async () => {
+    var tx;
+
+    server.expose('echo', async function(r){
+      r.sendNotice({ subject: 'notice', payload: r.getTx()})
+    });
+
+    client.observe('server.notice', function(notice){
+      tx = notice.getTx();
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: 'server.echo', tx: 1 });
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(tx).to.be.equal(1);
+  });
+  test('a request sent via an incomingNotice keep same transaction Id', async () => {
+    var tx;
+
+    server.expose('echo', async function(r){
+      tx = r.getTx();
+    });
+
+    client.observe('server.notice', async function(notice){
+      await notice.sendRequest({ subject: 'server.echo'})
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await server.sendNotice({ subject: 'notice', payload: {}, tx: 1 });
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(tx).to.be.equal(1);
+  });
+  test('a notice sent via an incomingNotice keep same transaction Id', async () => {
+    var tx;
+
+    server.observe('client.notice', async function(r){
+      tx = r.getTx();
+    });
+
+    client.observe('server.notice', async function(notice){
+      await notice.sendNotice({ subject: 'notice', payload: {}})
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await server.sendNotice({ subject: 'notice', payload: {}, tx: 1 });
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(tx).to.be.equal(1);
+  });
+  test('a request sent via an incomingResponse keep same transaction Id', async () => {
+    var tx = [];
+
+    server.expose('echo', async function(r){
+      tx.push(r.getTx())
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: 'server.echo', tx: 1 });
+    await res.sendRequest({ subject: 'server.echo'});
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(tx).to.be.equal([1,1]);
+  });
+  test('a notice sent via an incomingResponse keep same transaction Id', async () => {
+    var tx = [];
+
+    server.expose('echo', async function(r){
+      tx.push(r.getTx())
+    });
+
+    server.observe('client.echo', async function(r){
+      tx.push(r.getTx())
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: 'server.echo', tx: 1 });
+    await res.sendNotice({ subject: 'echo', payload: {}});
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(tx).to.be.equal([1,1]);
+  });
+});
+
+experiment('log notice messages:', ()=>{
+
+  test('exposed method generates <SERVICE_FULLNAME>._LOG.EXPOSE.<METHOD_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off" });
+    const client = Paip({ name: "client", log: "off" });
+
+    var expectedLog = {
+      "subject": "server.__EXPOSE__.echo",
+      "metadata": {},
+      "service": "server",
+      "payload": {
+        "request": {
+          "metadata": {},
+          "service": "client",
+          "subject": "server.echo",
+          "args": [],
+          "isPaipRequest": true
+        },
+        "response": {
+          "metadata": {},
+          "service": "server",
+          "subject": "server.echo",
+          "statusCode": 200,
+          "payload": 1,
+          "to": "client",
+          "isPaipResponse": true
+        }
+      },
+      'isPaipNotice': true
+    };
+
+    var actualLog = {};
+
+    server.expose('echo', function(r){
+      return 1
+    });
+
+    client.observe('server.__EXPOSE__.echo', function(notice){
+      // clean up log from random properties
+      actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx']);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await client.sendRequest({ subject: 'server.echo' });
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
+  });
+  test('request generates <SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off" });
+    const client = Paip({ name: "client", log: "off" });
+
+    var expectedLog = {
+      "metadata": {},
+      "service": "client",
+      "subject": "client.__REQUEST__.server.echo",
+      "payload": {
+        "request": {
+          "metadata": {},
+          "service": "client",
+          "subject": "server.echo",
+          "args": [],
+          "isPaipRequest": true
+        },
+        "response": {
+          "metadata": {},
+          "service": "server",
+          "subject": "server.echo",
+          "statusCode": 200,
+          "payload": 1,
+          "to": "client",
+          "isPaipResponse": true
+        }
+      },
+      "isPaipNotice": true
+    }
+
+
+    var actualLog = {};
+
+    server.expose('echo', function(r){
+      return 1
+    });
+
+    server.observe('client.__REQUEST__.server.echo', function(notice){
+      // clean up log from random properties
+      actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx']);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await client.sendRequest({ subject: 'server.echo' });
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
+
+  });
+  test('request time out generates <SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+    const client = Paip({ name: "client", log: "off", timeout: 100 });
+
+    var expectedLog = {
+      "metadata": {},
+      "service": "client",
+      "subject": "client.__REQUEST__.unknown",
+      "payload": {
+        "request": {
+          "metadata": {},
+          "service": "client",
+          "subject": "unknown",
+          "args": [],
+          "isPaipRequest": true
+        },
+        "response": {
+          "metadata": {},
+          "service": "client",
+          "subject": "unknown",
+          "error": {
+            "name": "NatsError",
+            "message": "The request timed out for subscription id: -1",
+            "code": "REQ_TIMEOUT",
+            "statusCode": 500
+          },
+          "statusCode": 500,
+          "to": "client",
+          "isPaipResponse": true
+        }
+      },
+      "isPaipNotice": true
+    }
+
+    var actualLog = {};
+
+    client.observe('client.__REQUEST__.unknown', function(notice){
+      // clean up log from random properties
+      actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.response.error.stack']);
+    });
+
+    await client.ready();
+
     try {
-      await client.invoke({ subject: "server.throwSync", args: [3, 4] });
-    } catch (e) {}
-    await new Promise(r => setTimeout(r, 200));
-    expect(serverLog.request.args).to.equal([3, 4]);
-    expect(serverLog.response.statusCode).to.equal(500);
-    expect(serverLog.response.error.message).to.equal("SyncError");
-    // invoke generate similar logs
-    expect(clientLog.request.args).to.equal([3, 4]);
-    expect(clientLog.response.statusCode).to.equal(500);
-    expect(clientLog.response.error.message).to.equal("SyncError");
-    serverLog = undefined;
-    clientLog = undefined;
-  });
+      await client.sendRequest({ subject: 'unknown' }).then(r => r.getPayload())
+    }catch(e){
+      expect(e).to.be.an.error()
+    }
 
-  test("request subject unavailable", async () => {
-    try {
-      await client.invoke({ subject: "server.whatever", args: [3, 4] });
-    } catch (e) {}
-    await new Promise(r => setTimeout(r, 200));
-    // server does not get the request at all
-    expect(serverLog).to.be.undefined();
-    // invoke does not generate any log
-    expect(clientLog.response.error.name).to.equal("NatsError");
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await client.shutdown();
   });
 });
