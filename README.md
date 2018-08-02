@@ -1,15 +1,16 @@
 # PAIP
 
-**PAIP** (read pipe) is a lightweight microservice toolkit built around NATS and let `server services` **expose** local methods on NATS subjects
+**PAIP** (read pipe) is a lightweight microservice toolkit built around NATS and let `server services` **expose** local methods on **NATS subjects**
 so that `client services` can **send request** to them remotely. You can also define `middleware services` that proxy incoming request to backend services
-and proxy the response back to the caller.
+and proxy the response back to the caller. In this case the messages flowing through will keep a common transaction ID so we can trace them.
 
-`paip services` can also **send** `notice` message and **observe** `notice`
+`paip services` can also **send** `notice` message and **observe** `notice` messages. A notice message can be used to inform
+other services asynchronously about something that has happened. 
 
-Each **paip** service must provide a service name and an optional namespace. All the subjects exposed by that service
-will be namespaced under **[NAMESPACE.]SERVICE_NAME**
+Each **paip** service must provide a service name and an optional namespace. All subjects exposed by the service
+will be namespaced with the following subject prefix: **[NAMESPACE.]SERVICE_NAME**
 
-All the 'notice' message will also be namespaced under **[NAMESPACE.]SERVICE_NAME**.
+All the 'notice' message will also be namespaced under the same prefix.
 
 # Messages
 
@@ -22,7 +23,7 @@ Property Name | Type | Description
 `service` | string | this is the name of the service making the request
 `subject` | string | this is the subject of the request
 `args` | array | this is the arguments to be passed to the remote method
-`metadata`? | any | this is an optional metadata object
+`metadata` | any | this is an optional metadata object
 `tx` | string | this is the transaction Id of the request
 `time` | date | this is the time the request was made
 `isPaipRequest` | Boolean | always set to true to indicate this is a request message
@@ -34,8 +35,8 @@ Property Name | Type | Description
 `service` | string | this is the name of the service sending the response
 `subject` | string | this is the subject of the request this response belong go
 `statusCode` | number | this is the statusCode of the response
-`payload` | any | this is the optional content of the response
-`error` | object | this is the optional error object only present if this is an error response
+`payload?` | any | this is the optional content of the response
+`error?` | object | this is the optional error object only present if this is an error response
 `tx` | string | this is the transaction Id of the request
 `time` | date | this is the time the response was sent
 `isPaipRequest` | Boolean | always set to true to indicate this is a response message
@@ -97,27 +98,32 @@ const client = P({ name: 'client'});
 async function boot(){
   await client.ready();
   
-  client.sendRequest({ subject: 'server.add', args: []})
-  .then(res => res.getPayload())
-  .then(console.log)
-  .catch(console.error)
+  client.sendRequest({ subject: 'server.add', args: [3, 4]})
+    .then(res => res.getPayload())
+    .then(console.log) // => 7
 }
 
 boot();
 ```
 
-We need to specify the full subject name of the exposed remote method, that as said before its always namespaced after **[NAMESPACE.]SERVICE_NAME**.
-We extract the payload of the response before being able to work on it.
+As you can see we had to specify the full subject name `server.add` because any exposed subject with the following subject prefix
+**[NAMESPACE.]SERVICE_NAME**.
 
-Please note client.request returns a Promise that only rejects if there was a Nats error, but will resolve even if the remote method threw an error.
-In this case res.getPayload() when executed will throw the original remote error.
+We extract the payload of the response in order to access its value.
 
-Its also important to notice that both the **expose** and the **sendRequest** method, will automatically generate a notice log entry under a well known 
-formatted subject: 
+Please note **client.sendRequest** returns a Promise that only rejects if there was a Nats communication error, and will 
+resolve even if the remote method threw an error.
 
-a notice message whose payload contains both request and response messages will be published under `server.__EXPOSE__.add`;
+**res.getPayload()** will return the result of the method execution or will throw the original remote error.
 
-a notice message whose payload contains both request and response messages will also be published under `client.__INVOKE__.server.add`;
+Its also important to notice that both the **expose** and the **sendRequest** method, will automatically generate a notice 
+message under a well known formatted subject: 
+
+- `server.expose('add', ...` will generate a notice message whose payload contains both request and response messages 
+and will be published under `server.__EXPOSE__.add`;
+
+- `client.sendRequest({ subject: 'server.add', ...` will generate a notice message whose payload contains both request 
+and response messages and will be published under `client.__INVOKE__.server.add`;
 
 This way you can easily build a monitoring system for your mesh of paip microservices.
 
@@ -245,7 +251,7 @@ via the `IncomingRequest` unique _INBOX reply To subject. check official nats cl
 The `handler` function should return a value, a promise or simply throw an error.
 
 Also, for simplicity if the exposed method make another paip request, it can return directly the corresponding paip Response 
-and the framework will extract the result of the response automatically.
+and the framework will extract the result of the response automatically for you.
 
 ie. the following code behave the same:
 ```javascript
