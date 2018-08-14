@@ -58,7 +58,7 @@ Property Name | Type  | Description
 This is how you initialize a paip service:
 
 ```javascript
-const P = require('paip').Paip;
+const P = require('paip');
 
 const server = P({ name: 'server'});
 ```
@@ -91,7 +91,7 @@ boot();
 Somewhere else we have a client paip service that wants to execute the remote method add:
 
 ```javascript
-const P = require('paip').Paip;
+const P = require('paip');
 
 const client = P({ name: 'client'});
 
@@ -336,7 +336,7 @@ Paip provides an additional interface for working with paip message to simplify 
 the following block of code behave the same:
 
 ```javascript
-const Paip = require("paip").Paip;
+const Paip = require("paip");
 
 const client = Paip({ name: "client" });
 const server = Paip({ name: "server" });
@@ -359,7 +359,7 @@ boot();
 ```
 
 ```javascript
-const Paip = require("paip").Paip;
+const Paip = require("paip");
 const U = require('paip').utils;
 
 const client = Paip({ name: "client" });

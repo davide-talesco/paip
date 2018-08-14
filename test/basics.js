@@ -1,6 +1,6 @@
 "use strict";
 const _ = require("lodash");
-const { Paip, msg } = require("../index");
+const Paip = require("../index");
 const Lab = require("lab");
 const { expect, fail } = require("code");
 

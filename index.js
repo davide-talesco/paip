@@ -910,7 +910,6 @@ const utils = {
   shutdown: service => () => service.shutdown(),
 };
 
-module.exports = {
-  Paip: Paip,
-  utils: utils
-};
+Paip.utils = utils;
+
+module.exports = Paip;
