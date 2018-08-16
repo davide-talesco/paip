@@ -866,7 +866,7 @@ const Paip = function( options = {} ){
     sendRequest,
     sendNotice,
     shutdown,
-    getFullName: _service.getFullName
+    getFullName: _service.getFullName.bind(_service)
   }
 };
 
