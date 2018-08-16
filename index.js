@@ -911,5 +911,6 @@ const utils = {
 };
 
 Paip.utils = utils;
+Paip.Response = Response;
 
 module.exports = Paip;
