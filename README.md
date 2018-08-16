@@ -329,6 +329,10 @@ This method return a promise that fulfills only when all handlers are subscribed
 
 This method flush paip cache and shutdown the paip service. It returns a promise that fulfill once the shutdown has completed.
 
+### getFullName
+
+Return the paip service fullname.
+
 ## Message Interface
 
 Paip provides an additional interface for working with paip message to simplify your application code.
