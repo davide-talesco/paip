@@ -140,6 +140,11 @@ const Message = stampit({
       return this;
     },
 
+    mergeMetadata: function(metadata) {
+      this.metadata = _.merge(_.cloneDeep(metadata), this.metadata)
+      return this;
+    },
+
     getTime: function(){ return this.time },
 
     setTime: function(time) {
@@ -889,6 +894,8 @@ const utils = {
   getMetadata: function(o){ return o.getMetadata() },
 
   setMetadata: R.curry(function(metadata, o){ return o.setMetadata(metadata) }),
+
+  mergeMetadata: R.curry(function(metadata, o){ return o.mergeMetadata(metadata) }),
 
   getTime: function(o){ return o.getTime() },
 

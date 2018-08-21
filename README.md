@@ -143,6 +143,7 @@ Method Name | Input Type | Return Type |  Description
 `setArgs(args)` | array  | this | set request args
 `getMetadata(path)` | any  | any | Retrieve the value at a given path of the message metadata object. path must be an array of strings ie. get(['requestor', id]) => return message.metadata.requestor.id
 `setMetadata(value)` | any  | any | Set the metadata property
+`mergeMetadata(value)` | any  | any | merge value with request metadata as per lodash merge logic
 `getTx` | N/A  | string |get the transaction Id of the message
 `setTx` | string  | this | set the transaction Id of the message
 `getService` | N/A  | string | get the service of the message
@@ -161,6 +162,7 @@ Method Name | Input Type | Return Type |  Description
 `setSubject` | string | this  | set the subject of the message
 `getMetadata(path)` | any  | any | Retrieve the value at a given path of the message metadata object. path must be an array of strings ie. get(['requestor', id]) => return message.metadata.requestor.id
 `setMetadata(value)` | any  | any | Set the metadata property
+`mergeMetadata(value)` | any  | any | merge value with request metadata as per lodash merge logic
 `getTx` | N/A  | string |get the transaction Id of the message
 `setTx` | string  | this | set the transaction Id of the message
 `getService` | N/A  | string | get the service of the message
@@ -181,6 +183,7 @@ Method Name | Input Type | Return Type |  Description
 `setSubject` | string | this  | set the subject of the message
 `getMetadata(path)` | any  | any | Retrieve the value at a given path of the message metadata object. path must be an array of strings ie. get(['requestor', id]) => return message.metadata.requestor.id
 `setMetadata(value)` | any  | any | Set the metadata property
+`mergeMetadata(value)` | any  | any | merge value with request metadata as per lodash merge logic
 `getTx` | N/A  | string |get the transaction Id of the message
 `setTx` | string  | this | set the transaction Id of the message
 `getService` | N/A  | string | get the service of the message
@@ -308,11 +311,11 @@ This method return a Promise that fulfills with a Response object.
 
 ### sendNotice
 
-With sendRequest a service can execute a remote method exposed over nats:
+With sendNotice a service can send a notice message over nats to inform other services about something:
  
-`paip.sendRequest(request)`
+`paip.sendNotice(request)`
 
-This method return a Promise that fulfills with a Response object.
+This method return a Promise that fulfills with void.
 
 **IMPORTANT**
 Please note the subject of the request gets namespaced after the service full name as we want to avoid a service to 
