@@ -235,7 +235,7 @@ const Response = stampit(Message, {
   initializers: [
     function({ error, payload, to }){
       if (error) {
-        this.error = JSON.parse(Errio.stringify(error));
+        this.error = typeof error === 'string' ? error : Errio.stringify(error);
         // if error has statusCode use it otherwise set it to 500
         error.statusCode
           ? (this.statusCode = error.statusCode)
@@ -263,7 +263,7 @@ const Response = stampit(Message, {
     getStatusCode : function(){ return this.statusCode },
     getPayload : function(){
       if (this.statusCode === 200) return _.cloneDeep(this.payload);
-      throw Errio.fromObject(this.error);
+      throw Errio.parse(this.error);
     }
   }
 });
