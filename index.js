@@ -649,9 +649,7 @@ const ExposeHandler = stampit(Handler, {
             tx: incomingRequest.getTx(),
             subject: incomingRequest.getSubject()
           }))
-          .catch(err => {
-            throw err;
-          })
+
           // send it back to the caller
           .then(outgoingResponse => {
             nats.sendResponse(replyTo, outgoingResponse);
