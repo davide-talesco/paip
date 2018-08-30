@@ -586,7 +586,8 @@ experiment('log notice messages:', ()=>{
           "error": {
             "name": "NatsError",
             "message": "The request timed out for subscription id: -1",
-            "code": "REQ_TIMEOUT"
+            "code": "REQ_TIMEOUT",
+            "statusCode": 500
           },
           "statusCode": 500,
           "to": "client",
@@ -600,8 +601,7 @@ experiment('log notice messages:', ()=>{
 
     client.observe('__LOG.client.__REQUEST__.unknown', function(notice){
       const log = notice.get();
-      // because the way we are serializing errors nats timeout error will be a string and has to be parsed
-      log.payload.response.error = JSON.parse(log.payload.response.error);
+
       // clean up log from random properties
       actualLog = _.omit(log, ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.response.error.stack']);
 
@@ -677,11 +677,17 @@ experiment('log notice messages:', ()=>{
             { metadata: {},
               service: 'server',
               subject: 'server.login',
+              payload: { "user": "pippo"},
               isPaipNotice: true },
           response:
             { metadata: {},
               service: 'client',
               subject: 'server.login',
+              error: {
+                "name": "Error",
+                "message": "pippone",
+                "statusCode": 500
+              },
               statusCode: 500,
               isPaipResponse: true } },
       isPaipNotice: true };
@@ -693,7 +699,7 @@ experiment('log notice messages:', ()=>{
     });
 
     client.observe('__LOG.client.__OBSERVE__.server.login', function(notice){
-      actualLog = _.omit(notice.get(), ['time','tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.request.payload','payload.response.error' ]);
+      actualLog = _.omit(notice.get(), ['time','tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.response.error.stack' ]);
     });
 
     await server.ready();
