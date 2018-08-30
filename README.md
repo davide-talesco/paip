@@ -128,7 +128,11 @@ and will be published under `__LOG.server.__EXPOSE__.add`;
 and response messages and will be published under `__LOG.client.__INVOKE__.server.add`;
 
 - also `client.observe('server.login', handler)` will generate a log notice message whose payload contains both request which is the observed
-notice message and response which will be whatever returned by the handler. The log will be published under `__LOG.client.__OBSERVE__.server.add`
+notice message and a response whose payload will be whatever returned by the handler. 
+If the handler threw the error prop of the response will be populated.
+
+The log will be published under `__LOG.client.__OBSERVE__.server.add`
+
 Please note, in this case, to avoid loop when observing a service log subject the observe itself will not generate the log entry.
 
 This way you can easily build a monitoring system for your mesh of paip microservices.
