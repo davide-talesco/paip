@@ -621,4 +621,90 @@ experiment('log notice messages:', ()=>{
 
     await client.shutdown();
   });
+  test('observe method generates __LOG.<SERVICE_FULLNAME>.__OBSERVE__.<METHOD_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off" });
+    const client = Paip({ name: "client", log: "off" });
+
+    var expectedLog = {
+      metadata: {},
+      service: 'client',
+      subject: '__LOG.client.__OBSERVE__.server.login',
+      payload:
+        { request:
+            { metadata: {},
+              service: 'server',
+              subject: 'server.login',
+              isPaipNotice: true },
+          response:
+            { metadata: {},
+              service: 'client',
+              subject: 'server.login',
+              statusCode: 200,
+              isPaipResponse: true } },
+      isPaipNotice: true };
+
+    var actualLog = {};
+
+    client.observe('server.login', function(notice){
+      // do not return anything
+    });
+
+    client.observe('__LOG.client.__OBSERVE__.server.login', function(notice){
+      actualLog = _.omit(notice.get(), ['time','tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.request.payload' ]);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await server.sendNotice({ subject: 'login', payload: { user: 'pippo'} });
+
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
+  });
+  test('observe method that throws generates __LOG.<SERVICE_FULLNAME>.__OBSERVE__.<METHOD_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off" });
+    const client = Paip({ name: "client", log: "off" });
+
+    var expectedLog = {
+      metadata: {},
+      service: 'client',
+      subject: '__LOG.client.__OBSERVE__.server.login',
+      payload:
+        { request:
+            { metadata: {},
+              service: 'server',
+              subject: 'server.login',
+              isPaipNotice: true },
+          response:
+            { metadata: {},
+              service: 'client',
+              subject: 'server.login',
+              statusCode: 500,
+              isPaipResponse: true } },
+      isPaipNotice: true };
+
+    var actualLog = {};
+
+    client.observe('server.login', function(notice){
+      throw new Error('pippone')
+    });
+
+    client.observe('__LOG.client.__OBSERVE__.server.login', function(notice){
+      actualLog = _.omit(notice.get(), ['time','tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.request.payload','payload.response.error' ]);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await server.sendNotice({ subject: 'login', payload: { user: 'pippo'} });
+
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
+  });
 });

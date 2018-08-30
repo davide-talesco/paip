@@ -706,22 +706,57 @@ const ObserveHandler = stampit(Handler, {
           return;
         // we need to build the incomingRequest
         return Promise.resolve(IncomingNotice( nats, service, notice ))
-        // pass the request to the handler
-          .then(that.handler)
-          // discard any kind of handler return values
-          .then(() => {
-            // log it to console
-            service.logger.child()
-              .set({ message: 'received Notice'})
-              .set({ notice: Notice(notice).get()}).debug();
+          .then(IncomingNotice => {
+            // pass the request to the handler
+            return Promise.resolve(IncomingNotice)
+              .then(that.handler)
+            // build the response both if it was successful or not
+              .then(payload => {
+                return Response({
+                  service: service.getFullName(),
+                  payload: payload,
+                  tx: IncomingNotice.getTx(),
+                  subject: IncomingNotice.getSubject()
+                })
+              })
+              .catch(error => Response({
+                service: service.getFullName(),
+                error: error,
+                tx: IncomingNotice.getTx(),
+                subject: IncomingNotice.getSubject()
+              }))
+              .then(response => {
+                // build the subject where to publish service logs
+                const logSubject = "__OBSERVE__" + '.' + IncomingNotice.getSubject();
+                const log = Notice({
+                  isLog: true,
+                  subject: logSubject,
+                  payload: {request: IncomingNotice.get(), response: response},
+                  tx: IncomingNotice.getTx(),
+                  service: service.getFullName()
+                });
 
-            // log it to console
-            service.logger.child()
-              .set({ message: 'received Notice'})
-              .set({ notice: Notice(notice).getSummary()}).info();
+                if (notice.subject.startsWith('__LOG')){
+                  // unless we are observing a log entry otherwise we risk an observe loop
+                }
+                else{
+                  // publish the tuple request response for monitoring
+                  nats.sendNotice(log);
+                }
+
+                // log it to console
+                service.logger.child()
+                  .set({ message: 'received Notice'})
+                  .set({ notice: log}).debug()
+
+                // log it to console
+                service.logger.child()
+                  .set({ message: 'received Notice'})
+                  .set({ notice: log.getSummary()}).info()
+              })
           })
-          .catch(() => {
-
+          .catch(e => {
+            console.log(e)
           })
       })
         .then(sid => {
