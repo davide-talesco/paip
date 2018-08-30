@@ -458,12 +458,12 @@ experiment('transaction Id:', ()=> {
 
 experiment('log notice messages:', ()=>{
 
-  test('exposed method generates <SERVICE_FULLNAME>._LOG.EXPOSE.<METHOD_SUBJECT>', async()=>{
+  test('exposed method generates __LOG.<SERVICE_FULLNAME>.__EXPOSE__.<METHOD_SUBJECT>', async()=>{
     const server = Paip({ name: "server", log: "off" });
     const client = Paip({ name: "client", log: "off" });
 
     var expectedLog = {
-      "subject": "server.__EXPOSE__.echo",
+      "subject": "__LOG.server.__EXPOSE__.echo",
       "metadata": {},
       "service": "server",
       "payload": {
@@ -493,7 +493,7 @@ experiment('log notice messages:', ()=>{
       return 1
     });
 
-    client.observe('server.__EXPOSE__.echo', function(notice){
+    client.observe('__LOG.server.__EXPOSE__.echo', function(notice){
       // clean up log from random properties
       actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx']);
     });
@@ -510,14 +510,14 @@ experiment('log notice messages:', ()=>{
     await server.shutdown();
     await client.shutdown();
   });
-  test('request generates <SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+  test('request generates __LOG.<SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
     const server = Paip({ name: "server", log: "off" });
     const client = Paip({ name: "client", log: "off" });
 
     var expectedLog = {
       "metadata": {},
       "service": "client",
-      "subject": "client.__REQUEST__.server.echo",
+      "subject": "__LOG.client.__REQUEST__.server.echo",
       "payload": {
         "request": {
           "metadata": {},
@@ -546,7 +546,7 @@ experiment('log notice messages:', ()=>{
       return 1
     });
 
-    server.observe('client.__REQUEST__.server.echo', function(notice){
+    server.observe('__LOG.client.__REQUEST__.server.echo', function(notice){
       // clean up log from random properties
       actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx']);
     });
@@ -564,13 +564,13 @@ experiment('log notice messages:', ()=>{
     await client.shutdown();
 
   });
-  test('request time out generates <SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+  test.only('request time out generates __LOG.<SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
     const client = Paip({ name: "client", log: "off", timeout: 100 });
 
     var expectedLog = {
       "metadata": {},
       "service": "client",
-      "subject": "client.__REQUEST__.unknown",
+      "subject": "__LOG.client.__REQUEST__.unknown",
       "payload": {
         "request": {
           "metadata": {},
@@ -599,7 +599,7 @@ experiment('log notice messages:', ()=>{
 
     var actualLog = {};
 
-    client.observe('client.__REQUEST__.unknown', function(notice){
+    client.observe('__LOG.client.__REQUEST__.unknown', function(notice){
       // clean up log from random properties
       actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.response.error.stack']);
     });

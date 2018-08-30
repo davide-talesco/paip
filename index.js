@@ -326,6 +326,15 @@ const Notice = stampit(Message, {
       }
 
       this.isPaipNotice = true;
+    },
+    function({ isLog  }) {
+
+      // if this is a log notice just prepend the subject with LOG namespace
+      if (isLog) {
+        this.subject = '__LOG.' + this.subject;
+      }
+
+      this.isPaipNotice = true;
     }
   ],
   methods: {
@@ -649,14 +658,15 @@ const ExposeHandler = stampit(Handler, {
 
             // build the subject where to publish service logs
             const logSubject = "__EXPOSE__" + '.' + that.getSubject();
-
-            // also publish the tuple request response for monitoring
-            nats.sendNotice(Notice({
+            const notice = Notice({
+              isLog: true,
               subject: logSubject,
               payload: {request: request, response: outgoingResponse},
               tx: incomingRequest.getTx(),
               service: service.getFullName()
-            }));
+            });
+            // also publish the tuple request response for monitoring
+            nats.sendNotice(notice);
 
             // log it to console
             service.logger.child()
@@ -712,7 +722,9 @@ const ObserveHandler = stampit(Handler, {
               .set({ message: 'received Notice'})
               .set({ notice: Notice(notice).getSummary()}).info();
           })
-          .catch(() => {})
+          .catch(() => {
+
+          })
       })
         .then(sid => {
           that.subscriptionId = sid;
@@ -740,6 +752,7 @@ const makeSendRequest = (nats, service) =>
 
           // also publish the tuple request response for monitoring
           nats.sendNotice(Notice({
+            isLog: true,
             subject: logSubject,
             payload: { request: outgoingRequest, response: rawResponse },
             tx: outgoingRequest.getTx(),
@@ -907,7 +920,9 @@ const utils = {
 
   getStatusCode : function(o){ return o.getStatusCode() },
 
-  getPayload : function(o){ return o.getPayload() },
+  getPayload : function(o)
+  {
+    return o.getPayload() },
 
   sendRequest: R.curry(function(request, o){ return o.sendRequest(request) }),
 

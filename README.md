@@ -12,6 +12,8 @@ will be namespaced with the following subject prefix: **[NAMESPACE.]SERVICE_NAME
 
 All the 'notice' message will also be namespaced under the same prefix.
 
+Every service interaction through paip will be logged as a notice message under __LOG.**[NAMESPACE.]SERVICE_NAME**.INTERACTION_TYPE.SUBJECT
+
 # Messages
 
 Paip services communicate by exchanging messages. We have 3 kind of messages: **request**, **response** and **notice**.
@@ -116,14 +118,18 @@ resolve even if the remote method threw an error.
 
 **res.getPayload()** will return the result of the method execution or will throw the original remote error.
 
-Its also important to notice that both the **expose** and the **sendRequest** method, will automatically generate a notice 
+Its also important to notice that both the **expose** and the **sendRequest** method, will automatically generate a log notice 
 message under a well known formatted subject: 
 
 - `server.expose('add', ...` will generate a notice message whose payload contains both request and response messages 
-and will be published under `server.__EXPOSE__.add`;
+and will be published under `__LOG.server.__EXPOSE__.add`;
 
 - `client.sendRequest({ subject: 'server.add', ...` will generate a notice message whose payload contains both request 
-and response messages and will be published under `client.__INVOKE__.server.add`;
+and response messages and will be published under `__LOG.client.__INVOKE__.server.add`;
+
+- also `client.observe('server.login', handler)` will generate a log notice message whose payload contains both request which is the observed
+notice message and response which will be whatever returned by the handler. The log will be published under `__LOG.client.__OBSERVE__.server.add`
+Please note, in this case, to avoid loop when observing a service log subject the observe itself will not generate the log entry.
 
 This way you can easily build a monitoring system for your mesh of paip microservices.
 
