@@ -564,7 +564,7 @@ experiment('log notice messages:', ()=>{
     await client.shutdown();
 
   });
-  test.only('request time out generates __LOG.<SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+  test('request time out generates __LOG.<SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
     const client = Paip({ name: "client", log: "off", timeout: 100 });
 
     var expectedLog = {
@@ -586,8 +586,7 @@ experiment('log notice messages:', ()=>{
           "error": {
             "name": "NatsError",
             "message": "The request timed out for subscription id: -1",
-            "code": "REQ_TIMEOUT",
-            "statusCode": 500
+            "code": "REQ_TIMEOUT"
           },
           "statusCode": 500,
           "to": "client",
@@ -600,8 +599,12 @@ experiment('log notice messages:', ()=>{
     var actualLog = {};
 
     client.observe('__LOG.client.__REQUEST__.unknown', function(notice){
+      const log = notice.get();
+      // because the way we are serializing errors nats timeout error will be a string and has to be parsed
+      log.payload.response.error = JSON.parse(log.payload.response.error);
       // clean up log from random properties
-      actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.response.error.stack']);
+      actualLog = _.omit(log, ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.response.error.stack']);
+
     });
 
     await client.ready();
