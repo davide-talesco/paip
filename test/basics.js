@@ -2,6 +2,8 @@
 const _ = require("lodash");
 const Paip = require("../index");
 const Lab = require("lab");
+const ldapjs = require('ldapjs');
+var SuperError = require('super-error');
 const { expect, fail } = require("code");
 
 // Test files must require the lab module, and export a test script
@@ -104,6 +106,39 @@ experiment('expose API:', ()=> {
 
     const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
     expect(() => res.getPayload()).to.throw('async')
+
+  });
+  test('expose a method that throws an LDAP Error', async () => {
+
+    server.expose("echo", r => new Promise((resolve, reject) => setTimeout(() => reject( new ldapjs.InvalidCredentialsError()), 100)));
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    expect(() => res.getPayload()).to.throw('InvalidCredentialsError')
+
+  });
+  test('expose a method that throws a custom error should allow usage of instanceof [EXPECTED TO FAIL AT THE MOMENT]', async () => {
+    var MyError = SuperError.subclass('MyError', function(code, message) {
+      this.code = code;
+      this.message = message;
+    });
+
+    var error = new MyError(420, 'Enhance Your Calm');
+
+    server.expose("echo", r => new Promise((resolve, reject) => setTimeout(() => reject( error), 100)));
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
+    try {
+      res.getPayload();
+    }catch(e){
+
+      expect(e).to.be.an.instanceof(MyError)
+    }
 
   });
   test('receive a request with metadata', async () => {

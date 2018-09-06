@@ -235,7 +235,12 @@ const Response = stampit(Message, {
   initializers: [
     function({ error, payload, to }){
       if (error) {
-        this.error = Errio.parse(Errio.stringify(error));
+        // override error constructor with generic one to avoid custom constructor with no setter which in strict mode cause:  TypeError: Cannot set property name of  which has only a getter
+        error.constructor = Error;
+
+        const stringified = Errio.stringify(error);
+        // TODO understand why breaks!!
+        this.error = Errio.parse(stringified);
         // if error has statusCode use it otherwise set it to 500
         error.statusCode
           ? (this.statusCode = error.statusCode)

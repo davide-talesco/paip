@@ -13,7 +13,6 @@
     "@stamp/it": "^1.0.3",
     "@stamp/privatize": "^1.0.3",
     "errio": "^1.2.2",
-    "ldapjs": "^1.0.2",
     "lodash": "^4.17.10",
     "nats": "^0.8.10",
     "ramda": "^0.25.0",
@@ -21,6 +20,8 @@
   },
   "devDependencies": {
     "code": "^5.2.0",
-    "lab": "^15.5.0"
+    "lab": "^15.5.0",
+    "ldapjs": "^1.0.2",
+    "super-error": "^2.2.0"
   }
 }
