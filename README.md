@@ -125,7 +125,7 @@ message under a well known formatted subject:
 and will be published under `__LOG.server.__EXPOSE__.add`;
 
 - `client.sendRequest({ subject: 'server.add', ...` will generate a notice message whose payload contains both request 
-and response messages and will be published under `__LOG.client.__INVOKE__.server.add`;
+and response messages and will be published under `__LOG.client.__REQUEST__.server.add`;
 
 - also `client.observe('server.login', handler)` will generate a log notice message whose payload contains both request which is the observed
 notice message and a response whose payload will be whatever returned by the handler. 
