@@ -741,8 +741,8 @@ const ObserveHandler = stampit(Handler, {
                   service: service.getFullName()
                 });
 
-                if (notice.subject.startsWith('__LOG')){
-                  // unless we are observing a log entry otherwise we risk an observe loop
+                // if we are observing our own log entry we should not log it as we risk an observe loop
+                if (notice.subject.startsWith('__LOG') && notice.service === service.fullName){
                 }
                 else{
                   // publish the tuple request response for monitoring
