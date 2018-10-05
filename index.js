@@ -757,7 +757,9 @@ const ObserveHandler = stampit(Handler, {
                 // log it to console
                 service.logger.child()
                   .set({ message: 'received Notice'})
-                  .set({ notice: log.getSummary()}).info()
+                  .set({ notice: log.getSummary()})
+                  .set({ statusCode: response.getStatusCode()}).info()
+
               })
           })
           .catch(e => {
