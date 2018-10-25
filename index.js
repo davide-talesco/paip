@@ -109,6 +109,8 @@ const Message = stampit({
 
     getSubject: function(){ return this.subject },
 
+    getFullSubject: function(){ return this.service + '.' + this.subject },
+
     setSubject: function(subject) {
       this.subject = subject;
       return this;
@@ -933,6 +935,8 @@ const utils = {
   get: function(o){ return o.get()},
 
   getSubject: function(o){ return o.getSubject() },
+
+  getFullSubject: function(o){ return o.getFullSubject() },
 
   setSubject: R.curry(function(subject, o){ return o.setSubject() }),
 
