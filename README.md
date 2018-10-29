@@ -88,6 +88,8 @@ async function boot(){
 }
 
 boot();
+
+
 ```
 
 Somewhere else we have a client paip service that wants to execute the remote method add:
@@ -212,6 +214,17 @@ Whenever you use the sendRequest / sendNotice methods of any incoming message, t
 of the incoming one, so we can track multi hop requests.
 
 # API
+
+The object returned by the module is also an Event Emitter and will emit the 'error' event only when the lower level nats socket connection has closed and we have reached the max number of reconnection attempts.
+
+In this case the caller code should exit immediately.
+
+```javascript
+// there was a fatal error we need to exit
+server.on("error", function(err){
+  process.exit(1)
+})
+```
 
 ## options 
 

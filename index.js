@@ -1,5 +1,6 @@
 const stampit = require("@stamp/it");
 const Privatize = require("@stamp/privatize");
+const EventEmitter = require('events');
 const uuidv4 = require("uuid/v4");
 const R = require("ramda");
 const NATS = require("nats");
@@ -448,7 +449,7 @@ const Nats = stampit({
         this.socket.on('close', function() {
           const err = new Error('Unable to reconnect to Nats');
           logger.child().set({ message: 'reconnected'}).error(err);
-          throw err
+          return err
         });
 
       });
@@ -836,6 +837,10 @@ const makeSendNotice = (nats, service) =>
 // this is the only exposed function
 const Paip = function( options = {} ){
 
+  // define the library object that will be returned to caller
+  // as an event emitter
+  const library = new EventEmitter();
+
   // initialize paip service details
   const _service = Service( options );
 
@@ -892,6 +897,9 @@ const Paip = function( options = {} ){
   const ready = function(){
     return _nats
       .connect()
+      .then(() => { _nats.socket.on('close', function(){
+        library.emit('error', new Error('Nats socket closed'))
+      })})
       .then(() => _logger.child().set({ message: 'connected to nats'}).info())
       .then(() =>
         Promise.all(
@@ -919,15 +927,17 @@ const Paip = function( options = {} ){
       .then(() => _logger.child().set({ message: 'Paip shutdown' }).info())
   };
 
-  return {
-    expose,
-    observe,
-    ready,
-    sendRequest,
-    sendNotice,
-    shutdown,
-    getFullName: _service.getFullName.bind(_service)
-  }
+  // attach all the exposed methods to the library object;
+
+  library.expose = expose;
+  library.observe = observe;
+  library.ready = ready;
+  library.sendRequest = sendRequest;
+  library.sendNotice = sendNotice;
+  library.shutdown = shutdown;
+  library.getFullName = _service.getFullName.bind(_service);
+
+  return library
 };
 
 const utils = {
