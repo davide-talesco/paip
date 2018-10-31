@@ -218,6 +218,11 @@ const IncomingRequest = function(nats, service, rawRequest){
       .then(makeSendNotice(nats, service))
   };
 
+  // return the name of the service that received the request (not the one that made it )
+  incomingRequest.getLocalServiceName = function(){
+    return service.getFullName();
+  }
+
   return incomingRequest;
 };
 
@@ -297,6 +302,11 @@ const IncomingResponse = function(nats, service, rawResponse){
     })
       .then(makeSendNotice(nats, service))
   };
+
+  // return the name of the service that received the response (not the one that made it )
+  incomingResponse.getLocalServiceName = function(){
+    return service.getFullName();
+  }
 
   return incomingResponse;
 };
@@ -949,6 +959,8 @@ const utils = {
   getSubject: function(o){ return o.getSubject() },
 
   getFullSubject: function(o){ return o.getFullSubject() },
+
+  getLocalServiceName: function(o){ return o.getLocalServiceName() },
 
   setSubject: R.curry(function(subject, o){ return o.setSubject() }),
 

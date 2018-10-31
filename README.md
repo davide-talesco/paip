@@ -158,12 +158,13 @@ Method Name | Input Type | Return Type |  Description
 `mergeMetadata(value)` | any  | any | merge value with request metadata as per lodash merge logic
 `getTx` | N/A  | string |get the transaction Id of the message
 `setTx` | string  | this | set the transaction Id of the message
-`getService` | N/A  | string | get the service of the message
+`getService` | N/A  | string | get the name of the service that made the request
 `setService` | string  | this | set the service of the message
 `getTime` | N/A  | string | get the time of the message
 `setTime` | date  | this | set the time of the message
 `sendRequest` | request Object | Promise(result)  | this is the method to send another request in line with the same transactionId of the incoming message
 `sendNotice` | notice Object | Promise(result)  | this is the method to send a notice message in line with the same transactionId of the incoming message
+`getLocalServiceName` | N/A | string | this is the name of the local service, the one that received the request. 
 
 #### Incoming Response
 
@@ -177,7 +178,7 @@ Method Name | Input Type | Return Type |  Description
 `mergeMetadata(value)` | any  | any | merge value with request metadata as per lodash merge logic
 `getTx` | N/A  | string |get the transaction Id of the message
 `setTx` | string  | this | set the transaction Id of the message
-`getService` | N/A  | string | get the service of the message
+`getService` | N/A  | string | get the name of the service that sent the response
 `setService` | string  | this | set the service of the message
 `getTime` | N/A  | string | get the time of the message
 `setTime` | date  | this | set the time of the message
@@ -185,6 +186,7 @@ Method Name | Input Type | Return Type |  Description
 `getPayload` | N/A  | any | get the payload of the response, throws the remote error if the response is an error
 `sendRequest` | request Object | Promise(result)  | this is the method to send another request in line with the same transactionId of the incoming message
 `sendNotice` | notice Object | Promise(result)  | this is the method to send a notice message in line with the same transactionId of the incoming message
+`getLocalServiceName` | N/A | string | this is the name of the local service, the one that received the response. 
 
 #### Incoming Notice
 
