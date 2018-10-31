@@ -765,12 +765,12 @@ const ObserveHandler = stampit(Handler, {
                 // log it to console
                 service.logger.child()
                   .set({ message: 'received Notice'})
-                  .set({ notice: log}).debug()
+                  .set({ notice: IncomingNotice}).debug()
 
                 // log it to console
                 service.logger.child()
                   .set({ message: 'received Notice'})
-                  .set({ notice: log.getSummary()})
+                  .set({ notice: IncomingNotice.getSummary()})
                   .set({ statusCode: response.getStatusCode()}).info()
 
               })
