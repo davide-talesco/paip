@@ -359,6 +359,10 @@ This method flush paip cache and shutdown the paip service. It returns a promise
 
 Return the paip service fullname.
 
+### id
+
+Return a new unique uuid
+
 ## Message Interface
 
 Paip provides an additional interface for working with paip message to simplify your application code.

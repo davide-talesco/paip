@@ -936,6 +936,8 @@ const Paip = function( options = {} ){
   library.sendNotice = sendNotice;
   library.shutdown = shutdown;
   library.getFullName = _service.getFullName.bind(_service);
+  // add id method to generate a uuid
+  library.id = uuidv4;
 
   return library
 };
