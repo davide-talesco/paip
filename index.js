@@ -9,6 +9,9 @@ const assert = require('assert');
 const Errio = require("errio");
 Errio.setDefaults({ stack: true });
 
+// Extend JSON global object with decycle and retrocycle methods
+require('./lib/cycle');
+
 const Logger = stampit({
   initializers: [
     function({ log }) {
@@ -44,28 +47,28 @@ const Logger = stampit({
     trace() {
       this._payload.level = 10;
       if (this.options.logLevel <= this._payload.level)
-        console.log(JSON.stringify(this._payload));
+        console.log(JSON.stringify(JSON.decycle(this._payload)));
     },
     debug() {
       this._payload.level = 20;
       if (this.options.logLevel <= this._payload.level)
-        console.log(JSON.stringify(this._payload));
+      console.log(JSON.stringify(JSON.decycle(this._payload)));
     },
     info() {
       this._payload.level = 30;
       if (this.options.logLevel <= this._payload.level)
-        console.log(JSON.stringify(this._payload));
+      console.log(JSON.stringify(JSON.decycle(this._payload)));
     },
     warn() {
       this._payload.level = 40;
       if (this.options.logLevel <= this._payload.level)
-        console.log(JSON.stringify(this._payload));
+      console.log(JSON.stringify(JSON.decycle(this._payload)));
     },
     error(err) {
       this._payload.level = 50;
       if (err) this._payload.error = Errio.stringify(err);
       if (this.options.logLevel <= this._payload.level)
-        console.log(JSON.stringify(this._payload));
+        console.log(JSON.stringify(JSON.decycle(this._payload)));
     },
     set(props) {
       if (typeof props !== "object") return this;
@@ -105,7 +108,7 @@ const Message = stampit({
   ],
   methods: {
     get: function(){
-      return JSON.parse(JSON.stringify(this))
+      return JSON.parse(JSON.stringify(JSON.decycle(this)))
     },
 
     getSubject: function(){ return this.subject },
@@ -477,6 +480,8 @@ const Nats = stampit({
       })
     },
     sendRequest(request) {
+      const decycledRequest = JSON.decycle(request);
+
       return new Promise((resolve, reject) => {
         const logger = this.logger;
 
@@ -484,40 +489,47 @@ const Nats = stampit({
         assert(_.isString(request.subject), 'request.subject must be a string in SendRequest');
         this.socket.requestOne(
           request.subject,
-          request,
+          // every time we push a request to nats make sure we decycle it from any possible circular reference
+          decycledRequest,
           {},
           this.timeout,
           response => {
+            const retrocycledResponse = JSON.retrocycle(response)
             // if response its NATS error throw it so we can wrap it around a paipResponse Object
             if (response instanceof NATS.NatsError) {
               logger.child().set({ message: 'received response', request, response }).trace();
                reject(response);
             }
-            logger.child().set({ message: 'received response', request, response }).trace();
-            return resolve(response);
+            logger.child().set({ message: 'received response', request, response: retrocycledResponse }).trace();
+            // every time we receive a response from nats we need to retrocycle it from any possible circular reference decycled on send
+            return resolve(retrocycledResponse);
           }
         );
-        logger.child().set({ message: 'sent Request', request }).trace();
+        logger.child().set({ message: 'sent Request', request: decycledRequest }).trace();
       });
     },
     sendResponse(replyTo, response) {
+      const decycledResponse = JSON.decycle(response);
+
       return new Promise((resolve, reject) => {
         const logger = this.logger;
-
-        this.socket.publish(replyTo, response, () => {
-          logger.child().set({ message: 'sent Response', response }).trace();
+        // every time we push a response to nats make sure we decycle it from any possible circular reference
+        this.socket.publish(replyTo, decycledResponse, () => {
+          logger.child().set({ message: 'sent Response', response: decycledResponse }).trace();
           resolve();
         });
       });
     },
     sendNotice(notice) {
+      const decycledNotice = JSON.decycle(notice);
       const logger = this.logger;
 
       return new Promise((resolve) => {
         assert(_.isObject(notice), 'message must be an object in sendNotice');
         assert(_.isString(notice.subject), 'message.subject must be a string in sendNotice');
-        this.socket.publish(notice.subject, notice, () => {
-          logger.child().set({ message: 'sent Notice', notice }).trace();
+        // every time we push a response to nats make sure we decycle it from any possible circular reference
+        this.socket.publish(notice.subject, decycledNotice, () => {
+          logger.child().set({ message: 'sent Notice', notice: decycledNotice }).trace();
           resolve();
         });
       });
@@ -530,13 +542,16 @@ const Nats = stampit({
           request,
           replyTo
         ) {
+
           // if no replyTo? ie. a broadcast message on this subject? simply discard the request
           if (!replyTo) {
             // TODO log it ?
             return;
           }
-          // pass the request to the Paip handler
-          handler(request, replyTo);
+          const retrocycledRequest = JSON.retrocycle(request)
+
+          // every time we pass a request to paip we need to retrocycle it
+          handler(retrocycledRequest, replyTo);
         });
         this.socket.flush(function() {
           logger.child().set({ message: 'Subscribed Expose Method', subject, queue }).trace();
@@ -548,7 +563,11 @@ const Nats = stampit({
       return new Promise((resolve) => {
         const logger = this.logger;
 
-        const sid =  this.socket.subscribe(subject, { queue }, handler);
+        const sid =  this.socket.subscribe(subject, { queue }, function(notice){
+          const retrocycledNotice = JSON.retrocycle(notice);
+          // every time we pass a notice to paip we need to retrocycle it
+          handler(retrocycledNotice);
+        });
 
         this.socket.flush(function() {
           logger.child().set({ message: 'Subscribed Observe Method', subject, queue }).trace();
@@ -923,7 +942,7 @@ const Paip = function( options = {} ){
       .then(() =>
         Promise.all(
           Object.keys(_observeHandlers).map(handlerName =>
-            // subscribe all expose handlers
+            // subscribe all observe handlers
             _observeHandlers[handlerName].observe(_nats, _service)
               .then(() => _logger.child().set({ message: 'Registered Observe handler', handler: _observeHandlers[handlerName].get() }).info())
           )

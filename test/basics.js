@@ -48,6 +48,15 @@ experiment("send Request API:", () => {
     const res = await client.sendRequest({ subject: "server.echo", args: [5, 4] });
     expect(res.getPayload()).to.equal([5, 4]);
   });
+  test('send a simple request with circular reference', async () => {
+    // define an object with circular reference
+    const circular = {}
+    circular.me = circular;
+
+    const res = await client.sendRequest({ subject: "server.echo", args: [circular] });
+    const payload = res.getPayload();
+    expect(res.getPayload()).to.equal([circular]);
+  });
 });
 
 experiment('expose API:', ()=> {
