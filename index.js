@@ -907,9 +907,15 @@ const Paip = function( options = {} ){
   const ready = function(){
     return _nats
       .connect()
-      .then(() => { _nats.socket.on('close', function(){
+      .then(() => { 
+        // both nats disconnect and close events are considered fatal
+        _nats.socket.on('close', function(){
         library.emit('error', new Error('Nats socket closed'))
-      })})
+      })
+      _nats.socket.on('disconnect', function(){
+        library.emit('error', new Error('Nats socket disconnected'))
+      })
+    })
       .then(() => _logger.child().set({ message: 'connected to nats'}).info())
       .then(() =>
         Promise.all(

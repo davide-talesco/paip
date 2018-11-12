@@ -217,7 +217,7 @@ of the incoming one, so we can track multi hop requests.
 
 # API
 
-The object returned by the module is also an Event Emitter and will emit the 'error' event only when the lower level nats socket connection has closed and we have reached the max number of reconnection attempts.
+The object returned by the module is also an Event Emitter and will emit the 'error' event only when the lower level nats socket connection has closed or has disconnected. No reconnection attempts are made as at the moment we do not have any logic to reregister the expose / observe handlers.
 
 In this case the caller code should exit immediately.
 
