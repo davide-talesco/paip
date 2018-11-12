@@ -936,6 +936,11 @@ const Paip = function( options = {} ){
         )
       )
       .then(() => _logger.child().set({ message: 'Paip ready' }).info())
+      .catch(e => {
+        // if there was a problem connecting to nats emit a fatal error
+        library.emit('error', e)
+        throw e;
+      })
   };
 
   const shutdown = function(){
