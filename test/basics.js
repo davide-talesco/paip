@@ -783,6 +783,31 @@ experiment('expose middleware:', ()=> {
     expect(res.getPayload()).to.equal(19);
   });
 
+  test('2 middlewares one after the other', async function(){
+    server.expose('add', function(req){
+      const [x,y] = req.getArgs();
+      return x + y;
+    });
+
+    server.exposeMiddleware(function(req){
+      const [x,y] = req.getArgs();
+      // increase the result by 10
+      return req.setArgs([ x, y + 10])
+    });
+
+    server.exposeMiddleware(function(req){
+      const [x,y] = req.getArgs();
+      // increase the result by 10
+      return req.setArgs([ x, y + 10])
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.add", args: [5, 4] });
+    expect(res.getPayload()).to.equal(29);
+  });
+
   test('middleware that modify req async', async function(){
     server.expose('add', function(req){
       const [x,y] = req.getArgs();
