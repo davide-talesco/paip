@@ -215,6 +215,72 @@ All set methods return the request object so they can be chained.
 Whenever you use the sendRequest / sendNotice methods of any incoming message, the newly generated message will keep the same transaction ID
 of the incoming one, so we can track multi hop requests.
 
+## Middlewares
+
+Middleware functions are functions that have access to the request object (req), and a function, called end that can be used to end the request-response cycle. If the middleware wants to only modify the request object and call the next middleware function / method in the stack it must return the modified req object
+
+Middleware functions can perform the following tasks:
+
+- Execute any code
+- Make changes to the request object for the next middleware / method
+- Explicitly end the request-response cycle
+- throw an error and end the request-response cycle
+- Call the next middleware function / method in the stack by returning the req or a Promise(req)
+
+
+
+A Paip application can use the following types of middleware:
+
+- Application-level expose middleware
+
+### Application-level expose middleware
+```javascript
+var paip = P()
+
+// handler that modify req and return it for the next middleware / expose handler synchronously
+paip.exposeMiddleware(function (req, end) {
+  return req.setMetadata({ requestor: 123});
+})
+
+// handler that modify req and return it for the next middleware / expose handler asynchronously
+paip.exposeMiddleware(function (req, end) {
+  return new Promise(r => {
+    setTimeout(() => {
+      return req.setMetadata({ requestor: 123});
+    }, 100)
+  });
+})
+
+// handler that end the request-response cycle
+paip.exposeMiddleware(function (req, end) {
+  return end('whatever');
+})
+
+// handler that end the request-response cycle by throwing synchronously
+paip.exposeMiddleware(function (req, end) {
+  throw new Error('unauthorized');
+})
+
+// handler that end the request-response cycle by throwing asynchronously
+paip.exposeMiddleware(function (req, end) {
+  return new Promise(resolve, reject => {
+    setTimeout(() => {
+      reject(new Error('unauthorized'));
+    }, 100)
+  });
+})
+
+// handler that end the request-response cycle asynchronously
+paip.exposeMiddleware(function (req, end) {
+  return new Promise(r => {
+    setTimeout(() => {
+      return end(new Error('unauthorized'));
+    }, 100)
+  });
+})
+
+```
+
 # API
 
 The object returned by the module is also an Event Emitter and will emit the 'error' event only when the lower level nats socket connection has closed or has disconnected. No reconnection attempts are made as at the moment we do not have any logic to reregister the expose / observe handlers.

@@ -633,7 +633,7 @@ const ExposeHandler = stampit(Handler, {
     }
   ],
   methods: {
-    expose(nats, service){
+    expose(nats, service, middlewares){
       const that = this;
       // call the expose and register callback handler
       return nats.expose(that.getFullSubject(), that.getQueue(), function(request, replyTo){
@@ -644,8 +644,8 @@ const ExposeHandler = stampit(Handler, {
         // we need to build the incomingRequest
         const incomingRequest = IncomingRequest(nats, service, request );
         return Promise.resolve(incomingRequest)
-        // pass the request to the handler
-          .then(that.handler)
+        // we need execute any attached middlewares
+          .then(buildMiddlewareStack(that.handler, middlewares))
           .then(rawResponse => {
             // if this is already an incomingResponse object just get its payload (an exposed method make another request and return its response directly)
             if (isIncomingResponse(rawResponse))
@@ -864,6 +864,7 @@ const Paip = function( options = {} ){
 
   const _exposeHandlers = {};
   const _observeHandlers = {};
+  const _middlewares = [];
 
   // send the request at request.subject and return a response object
   const sendRequest = function(request){
@@ -882,6 +883,11 @@ const Paip = function( options = {} ){
     })
       .then(makeSendNotice(_nats, _service))
   };
+
+  // register an expose middleware
+  const exposeMiddleware = function(middleware){
+    _middlewares.push(middleware);
+  }
 
   // expose subject under service full name to listen for request messages
   const expose = function(subject, handler){
@@ -921,7 +927,7 @@ const Paip = function( options = {} ){
         Promise.all(
           Object.keys(_exposeHandlers).map(handlerName =>
             // subscribe all expose handlers
-            _exposeHandlers[handlerName].expose( _nats, _service)
+            _exposeHandlers[handlerName].expose( _nats, _service, _middlewares)
               .then(() => _logger.child().set({ message: 'Registered Expose handler', handler:  _exposeHandlers[handlerName].get()}).info())
           )
         )
@@ -950,6 +956,7 @@ const Paip = function( options = {} ){
 
   // attach all the exposed methods to the library object;
 
+  library.exposeMiddleware = exposeMiddleware;
   library.expose = expose;
   library.observe = observe;
   library.ready = ready;
@@ -1016,3 +1023,33 @@ Paip.utils = utils;
 Paip.Response = Response;
 
 module.exports = Paip;
+
+function buildMiddlewareStack(handler, middlewares){
+
+  return function(req){
+    return new Promise(function(resolve, reject){
+      // compose a list of function into a Promise returning function. 
+      // Provide each function with an handler to the resolve method to end the pipeline
+      const compose = functions => initialValue =>
+        functions.reduce((p, fn, index) => {
+          return p.then(data => {
+            // if this is not the handler we need to make sure it returned a paip req object 
+            // otherwise things won't work and the error will be cryptic
+            if (functions.length !== index){
+              try {
+                data.getArgs();
+              }
+              catch(e){
+                throw new Error('Middleware returned non request object')
+              }
+            }
+            return fn(data, resolve)
+          });
+        }, Promise.resolve(initialValue));
+
+      compose([...middlewares, handler])(req)
+        .then(res => resolve(res))
+        .catch(err => reject(err))
+    });
+  }
+}

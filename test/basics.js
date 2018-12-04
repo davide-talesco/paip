@@ -749,3 +749,168 @@ experiment('log notice messages:', ()=>{
     await client.shutdown();
   });
 });
+
+experiment('expose middleware:', ()=> {
+  var server;
+  var client;
+
+  lab.beforeEach(async () => {
+    server = Paip({ name: "server", log: "off" });
+    client = Paip({ name: "client", log: "off" });
+  });
+
+  lab.afterEach(async () => {
+    await server.shutdown();
+    await client.shutdown();
+  });
+
+  test('middleware that modify req sync', async function(){
+    server.expose('add', function(req){
+      const [x,y] = req.getArgs();
+      return x + y;
+    });
+
+    server.exposeMiddleware(function(req){
+      const [x,y] = req.getArgs();
+      // increase the result by 10
+      return req.setArgs([ x, y + 10])
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.add", args: [5, 4] });
+    expect(res.getPayload()).to.equal(19);
+  });
+
+  test('middleware that modify req async', async function(){
+    server.expose('add', function(req){
+      const [x,y] = req.getArgs();
+      return x + y;
+    });
+
+    server.exposeMiddleware(function(req){
+      const [x,y] = req.getArgs();
+
+      return new Promise(r => {
+        setTimeout(() => {
+          // increase the result by 10
+          r(req.setArgs([ x, y + 10]))
+        }, 10);
+      })
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.add", args: [5, 4] });
+    expect(res.getPayload()).to.equal(19);
+  });
+
+  test('middleware that end req sync', async function(){
+    server.expose('add', function(req){
+      fail('This should never be executed');
+      const [x,y] = req.getArgs();
+      return x + y;
+    });
+
+    server.exposeMiddleware(function(req, end){
+      const [x,y] = req.getArgs();
+      // always end 
+      return end(0);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.add", args: [5, 4] });
+    expect(res.getPayload()).to.equal(0);
+  });
+
+  test('middleware that end req async', async function(){
+    server.expose('add', function(req){
+      fail('This should never be executed');
+      const [x,y] = req.getArgs();
+      return x + y;
+    });
+
+    server.exposeMiddleware(function(req, end){
+      const [x,y] = req.getArgs();
+
+      return new Promise(r => {
+        setTimeout(() => {
+          // end request - response cycle and always return 0
+          end(0);
+        }, 10);
+      })
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.add", args: [5, 4] });
+    expect(res.getPayload()).to.equal(0);
+  });
+
+  test('middleware that throw sync', async function(){
+    server.expose('add', function(req){
+      fail('This should never be executed');
+      const [x,y] = req.getArgs();
+      return x + y;
+    });
+
+    server.exposeMiddleware(function(req){
+      throw new Error('middleware error');
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.add", args: [5, 4] });
+    expect(() => res.getPayload()).to.throw('middleware error');
+  });
+
+  test('middleware that throw async', async function(){
+    server.expose('add', function(req){
+      fail('This should never be executed');
+      const [x,y] = req.getArgs();
+      return x + y;
+    });
+
+    server.exposeMiddleware(function(req, end){
+      const [x,y] = req.getArgs();
+
+      return new Promise((res, rej) => {
+        setTimeout(() => {
+          // end request - response cycle and always reject
+          rej(new Error('middleware error'))
+        }, 10);
+      })
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.add", args: [5, 4] });
+    expect(() => res.getPayload()).to.throw('middleware error');
+  });
+
+  test('middleware that doesn\' return a req object', async function(){
+    server.expose('add', function(req){
+      const [x,y] = req.getArgs();
+      return x + y;
+    });
+
+    server.exposeMiddleware(function(req){
+      // do not return a valid paip req object
+      return {}
+    });
+
+    await server.ready();
+    await client.ready();
+
+    const res = await client.sendRequest({ subject: "server.add", args: [5, 4] });
+    expect(() => res.getPayload()).to.throw('Middleware returned non request object')
+  });
+
+});
