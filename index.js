@@ -744,6 +744,7 @@ const ObserveHandler = stampit(Handler, {
                 subject: IncomingNotice.getSubject()
               }))
               .then(response => {
+
                 // build the subject where to publish service logs
                 const logSubject = "__OBSERVE__" + '.' + IncomingNotice.getSubject();
                 const log = Notice({
@@ -765,13 +766,19 @@ const ObserveHandler = stampit(Handler, {
                 // log it to console
                 service.logger.child()
                   .set({ message: 'received Notice'})
-                  .set({ notice: IncomingNotice}).debug()
+                  .set({ notice: IncomingNotice})
+                  .set({ response: response }).debug()
 
                 // log it to console
-                service.logger.child()
+                const infoLog = service.logger.child()
                   .set({ message: 'received Notice'})
                   .set({ notice: IncomingNotice.getSummary()})
-                  .set({ statusCode: response.getStatusCode()}).info()
+                  .set({ statusCode: response.getStatusCode()});
+                
+                  if (response.error){
+                    infoLog.set({ error: response.error || false })
+                  }
+                  infoLog.info()
 
               })
           })
