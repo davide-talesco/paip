@@ -6,6 +6,7 @@ const R = require("ramda");
 const NATS = require("nats");
 const _ = require("lodash");
 const assert = require('assert');
+const moment = require("moment");
 const Errio = require("errio");
 Errio.setDefaults({ stack: true });
 
@@ -637,6 +638,8 @@ const ExposeHandler = stampit(Handler, {
       const that = this;
       // call the expose and register callback handler
       return nats.expose(that.getFullSubject(), that.getQueue(), function(request, replyTo){
+        const start = new Date();
+
         // discard any message that is not a paip request
         if (!isRequest(request))
           return;
@@ -671,7 +674,7 @@ const ExposeHandler = stampit(Handler, {
           // send it back to the caller
           .then(outgoingResponse => {
             nats.sendResponse(replyTo, outgoingResponse);
-
+            const responseTime = moment.duration(new Date() - start).asSeconds();
             // build the subject where to publish service logs
             const logSubject = "__EXPOSE__" + '.' + that.getSubject();
             const notice = Notice({
@@ -686,15 +689,19 @@ const ExposeHandler = stampit(Handler, {
 
             // log it to console
             service.logger.child()
-              .set({ message: 'sent Response'})
+              .set({ timestamp: start })
+              .set({ message: 'incoming Request'})
+              .set({ responseTime })
               .set({ request: Request(request).get()})
               .set({ response: Response(outgoingResponse).get()}).debug();
 
             // log it to console
             service.logger.child()
-              .set({ message: 'sent Response'})
-              .set({ request: Request(request).getSummary()})
-              .set({ response: Response(outgoingResponse).getSummary()}).info();
+              .set({ message: 'incoming Request'})
+              .set({ service: request.service })
+              .set({ subject: request.subject })
+              .set({ statusCode: outgoingResponse.statusCode})
+              .set({ responseTime }).info();
           })
       })
         .then(sid => {
@@ -719,6 +726,7 @@ const ObserveHandler = stampit(Handler, {
     observe(nats, service){
       const that = this;
       return nats.observe(that.getFullSubject(), that.getQueue(), function(notice){
+        const start = new Date();
         // discard any message that is not a paip notice
         if (!isNotice(notice))
           return;
@@ -744,7 +752,7 @@ const ObserveHandler = stampit(Handler, {
                 subject: IncomingNotice.getSubject()
               }))
               .then(response => {
-
+                const observeTime = moment.duration(new Date() - start).asSeconds();
                 // build the subject where to publish service logs
                 const logSubject = "__OBSERVE__" + '.' + IncomingNotice.getSubject();
                 const log = Notice({
@@ -765,15 +773,19 @@ const ObserveHandler = stampit(Handler, {
 
                 // log it to console
                 service.logger.child()
-                  .set({ message: 'received Notice'})
-                  .set({ notice: IncomingNotice})
+                  .set({ timestamp: start })
+                  .set({ message: 'observed Notice'})
+                  .set({ observeTime })
+                  .set({ notice: IncomingNotice })
                   .set({ response: response }).debug()
 
                 // log it to console
                 const infoLog = service.logger.child()
-                  .set({ message: 'received Notice'})
-                  .set({ notice: IncomingNotice.getSummary()})
-                  .set({ statusCode: response.getStatusCode()});
+                  .set({ timestamp: start })
+                  .set({ message: 'observed Notice'})
+                  .set({ subject: notice.subject })
+                  .set({ statusCode: response.statusCode })
+                  .set({ observeTime });
                 
                   if (response.error){
                     infoLog.set({ error: response.error || false })
@@ -795,6 +807,7 @@ const ObserveHandler = stampit(Handler, {
 
 const makeSendRequest = (nats, service) =>
     outgoingRequest => {
+      const start = new Date();
       return nats.sendRequest(outgoingRequest)
         // if there was an error sending the request, typically a NATS timeout error wrap it around a Response Object
         .catch(err => Response({
@@ -807,6 +820,7 @@ const makeSendRequest = (nats, service) =>
         // build incoming response and return it to the caller
         .then(rawResponse => Response(rawResponse))
         .then(rawResponse => {
+          const responseTime = moment.duration(new Date() - start).asSeconds();
           // build the subject where to publish service logs
           const logSubject = "__REQUEST__" + '.' + rawResponse.getSubject();
 
@@ -821,15 +835,19 @@ const makeSendRequest = (nats, service) =>
 
           // log it to console
           service.logger.child()
-            .set({ message: 'sent Request'})
+            .set({ timestamp: start })
+            .set({ message: 'outgoing Request'})
+            .set({ responseTime })
             .set({ request: outgoingRequest.get()})
             .set({ response: rawResponse.get()}).debug();
 
           // log it to console
           service.logger.child()
-            .set({ message: 'sent Request'})
-            .set({ request: outgoingRequest.getSummary()})
-            .set({ response: rawResponse.getSummary()}).info();
+            .set({ timestamp: start })
+            .set({ message: 'outgoing Request'})
+            .set({ subject: outgoingRequest.subject })
+            .set({ statusCode: rawResponse.statusCode})
+            .set({ responseTime }).info();
 
           return IncomingResponse(nats, service, rawResponse)
         })
