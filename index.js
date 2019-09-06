@@ -697,6 +697,7 @@ const ExposeHandler = stampit(Handler, {
 
             // log it to console
             service.logger.child()
+              .set({ timestamp: start })
               .set({ message: 'incoming Request'})
               .set({ service: request.service })
               .set({ subject: request.subject })
@@ -855,15 +856,18 @@ const makeSendRequest = (nats, service) =>
 
 const makeSendNotice = (nats, service) =>
   outgoingNotice => {
+    const start = new Date();
     return nats.sendNotice(outgoingNotice)
       .then(() => {
         // log it to console
         service.logger.child()
+          .set({ timestamp: start })
           .set({ message: 'sent Notice'})
           .set({ notice: outgoingNotice.get()}).debug();
 
         // log it to console
         service.logger.child()
+          .set({ timestamp: start })
           .set({ message: 'sent Notice'})
           .set({ notice: outgoingNotice.getSummary()}).info();
       })
@@ -966,7 +970,9 @@ const Paip = function( options = {} ){
           )
         )
       )
-      .then(() => _logger.child().set({ message: 'Paip ready' }).info())
+      .then(() => _logger.child()
+        .set({ timestamp: new Date() })
+        .set({ message: 'Paip ready' }).info())
       .catch(e => {
         // if there was a problem connecting to nats emit a fatal error
         library.emit('error', e)
