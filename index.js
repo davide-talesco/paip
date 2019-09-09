@@ -7,8 +7,53 @@ const NATS = require("nats");
 const _ = require("lodash");
 const assert = require('assert');
 const moment = require("moment");
-const Errio = require("errio");
-Errio.setDefaults({ stack: true });
+
+function serializeError(key, value) {
+  if (value instanceof Error) {
+      var error = {};
+
+      // make sure common properties are available
+      const commonProperties = [
+        'name',
+        'message',
+        'stack',
+        'code'
+      ];
+      commonProperties.forEach(prop => error[prop] = value[prop]);
+
+      Object.getOwnPropertyNames(value).forEach(function (key) {
+          error[key] = value[key];
+      });
+
+      return error;
+  }
+
+  return value;
+}
+
+function parseError(serializedError){
+  var obj = {};
+  try {
+    if (typeof serializedError === 'string'){
+      obj = JSON.parse(serializedError);
+    }
+    else {
+      obj = serializedError;
+    }
+  }
+  catch(e){
+    obj = e;
+    obj.serializedError = serializedError;
+  }
+
+  const error = new Error(obj.message);
+
+  Object.getOwnPropertyNames(obj).forEach(function (key) {
+    error[key] = obj[key];
+  });
+
+  return error;
+}
 
 const Logger = stampit({
   initializers: [
@@ -64,7 +109,7 @@ const Logger = stampit({
     },
     error(err) {
       this._payload.level = 50;
-      if (err) this._payload.error = Errio.stringify(err);
+      if (err) this._payload.error = JSON.stringify(err, serializeError);
       if (this.options.logLevel <= this._payload.level)
         console.log(JSON.stringify(this._payload));
     },
@@ -244,12 +289,9 @@ const Response = stampit(Message, {
   initializers: [
     function({ error, payload, to }){
       if (error) {
-        // override error constructor with generic one to avoid custom constructor with no setter which in strict mode cause:  TypeError: Cannot set property name of  which has only a getter
-        error.constructor = Error;
 
-        const stringified = Errio.stringify(error);
-        // TODO understand why breaks!!
-        this.error = Errio.parse(stringified);
+        this.error = JSON.parse(JSON.stringify(error, serializeError));
+
         // if error has statusCode use it otherwise set it to 500
         error.statusCode
           ? (this.statusCode = error.statusCode)
@@ -277,7 +319,7 @@ const Response = stampit(Message, {
     getStatusCode : function(){ return this.statusCode },
     getPayload : function(){
       if (this.statusCode === 200) return _.cloneDeep(this.payload);
-      throw this.error;
+      throw parseError(this.error);
     }
   }
 });
