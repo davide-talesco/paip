@@ -12,7 +12,7 @@ will be namespaced with the following subject prefix: **[NAMESPACE.]SERVICE_NAME
 
 All the 'notice' message will also be namespaced under the same prefix.
 
-Every service interaction through paip will be logged as a notice message under __LOG.**[NAMESPACE.]SERVICE_NAME**.INTERACTION_TYPE.SUBJECT
+Logging nats interaction via Nats under __LOG.**[NAMESPACE.]SERVICE_NAME**.INTERACTION_TYPE.SUBJECT is possible by setting environment variables.
 
 # Messages
 
@@ -120,7 +120,7 @@ resolve even if the remote method threw an error.
 
 **res.getPayload()** will return the result of the method execution or will throw the original remote error.
 
-Its also important to notice that both the **expose** and the **sendRequest** method, will automatically generate a log notice 
+Its also important to notice that both the **expose**, **observe** and the **sendRequest** method, if the environment variable is set, will generate a log notice 
 message under a well known formatted subject: 
 
 - `server.expose('add', ...` will generate a notice message whose payload contains both request and response messages 
@@ -129,7 +129,7 @@ and will be published under `__LOG.server.__EXPOSE__.add`;
 - `client.sendRequest({ subject: 'server.add', ...` will generate a notice message whose payload contains both request 
 and response messages and will be published under `__LOG.client.__REQUEST__.server.add`;
 
-- also `client.observe('server.login', handler)` will generate a log notice message whose payload contains both request which is the observed
+- `client.observe('server.login', handler)` will generate a log notice message whose payload contains both request which is the observed
 notice message and a response whose payload will be whatever returned by the handler. 
 If the handler threw the error prop of the response will be populated.
 
@@ -228,7 +228,6 @@ Middleware functions can perform the following tasks:
 - Call the next middleware function / method in the stack by returning the req or a Promise(req)
 
 
-
 A Paip application can use the following types of middleware:
 
 - Application-level expose middleware
@@ -305,6 +304,9 @@ Property Name | Type | Required |  Default | Description
 `nats` | url or url, url or [url] | **false** | {} | this is the node-nats connection url. it can be a single url, a comma separated url or an array of url ["nats://localhost:4222", "nats://localhost:4223"] https://github.com/nats-io/node-nats
 `timeout` | number | **false** | 25000 | this is the milliseconds paip wait before declaring a request timed out
 `log` | string | **false** | info | valid values are off, info, debug, trace
+`enableObserveNatsLog` | string | **false** | false | enable logging via nats for Observe handlers allowed values are either true or false
+`enableRequestNatsLog` | string | **false** | false | enable logging via nats for request calls allowed values are either true or false
+`enableExposeNatsLog` | string | **false** | false | enable logging via nats for Expose handlers allowed values are either true or false
 
 ### Environment Variables
 
@@ -316,7 +318,10 @@ name | `PAIP_NAME` |
 namespace | `PAIP_NAMESPACE` | 
 nats | `PAIP_NATS` | 
 timeout | `PAIP_TIMEOUT` | 
-log | `PAIP_LOG` | 
+log | `PAIP_LOG` |
+enableObserveNatsLog | `PAIP_ENABLE_OBSERVE_NATS_LOG` |
+enableRequestNatsLog | `PAIP_ENABLE_REQUEST_NATS_LOG` |
+enableExposeNatsLog | `PAIP_ENABLE_EXPOSE_NATS_LOG` |
 
 If both are passed environment variables have precedence and will overwrite the value passed programmatically.
 

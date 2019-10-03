@@ -57,7 +57,7 @@ function parseError(serializedError){
 
 const Logger = stampit({
   initializers: [
-    function({ log }) {
+    function({ log, enableObserveNatsLog, enableRequestNatsLog, enableExposeNatsLog }) {
       const LOG_LEVEL_MAP = {
         off: 60,
         error: 50,
@@ -78,6 +78,10 @@ const Logger = stampit({
         );
         this.options.logLevel = LOG_LEVEL_MAP[log];
       }
+
+      this.options.enableObserveNatsLog = (process.env.PAIP_ENABLE_OBSERVE_NATS_LOG || enableObserveNatsLog) === 'true'
+      this.options.enableRequestNatsLog = (process.env.PAIP_ENABLE_REQUEST_NATS_LOG || enableRequestNatsLog) === 'true'
+      this.options.enableExposeNatsLog = (process.env.PAIP_ENABLE_EXPOSE_NATS_LOG || enableExposeNatsLog) === 'true'
     }
   ],
   methods: {
@@ -717,17 +721,19 @@ const ExposeHandler = stampit(Handler, {
           .then(outgoingResponse => {
             nats.sendResponse(replyTo, outgoingResponse);
             const responseTime = moment.duration(new Date() - start).asSeconds();
-            // build the subject where to publish service logs
-            const logSubject = "__EXPOSE__" + '.' + that.getSubject();
-            const notice = Notice({
-              isLog: true,
-              subject: logSubject,
-              payload: {request: request, response: outgoingResponse},
-              tx: incomingRequest.getTx(),
-              service: service.getFullName()
-            });
+
             // also publish the tuple request response for monitoring
-            nats.sendNotice(notice);
+            if (service.logger.options.enableExposeNatsLog){
+              // build the subject where to publish service logs
+              const logSubject = "__EXPOSE__" + '.' + that.getSubject();
+              nats.sendNotice(Notice({
+                isLog: true,
+                subject: logSubject,
+                payload: {request: request, response: outgoingResponse},
+                tx: incomingRequest.getTx(),
+                service: service.getFullName()
+              }));
+            }
 
             // log it to console
             service.logger.child()
@@ -796,22 +802,24 @@ const ObserveHandler = stampit(Handler, {
               }))
               .then(response => {
                 const observeTime = moment.duration(new Date() - start).asSeconds();
-                // build the subject where to publish service logs
-                const logSubject = "__OBSERVE__" + '.' + IncomingNotice.getSubject();
-                const log = Notice({
-                  isLog: true,
-                  subject: logSubject,
-                  payload: {request: IncomingNotice.get(), response: response},
-                  tx: IncomingNotice.getTx(),
-                  service: service.getFullName()
-                });
 
-                // if we are observing our own log entry we should not log it as we risk an observe loop
-                if (notice.subject.startsWith('__LOG') && notice.service === service.fullName){
-                }
-                else{
-                  // publish the tuple request response for monitoring
-                  nats.sendNotice(log);
+                if (service.logger.options.enableObserveNatsLog){
+                  // build the subject where to publish service logs
+                  const logSubject = "__OBSERVE__" + '.' + IncomingNotice.getSubject();
+  
+                  // if we are observing our own log entry we should not log it as we risk an observe loop
+                  if (notice.subject.startsWith('__LOG') && notice.service === service.fullName){
+                  }
+                  else{
+                    // publish the tuple request response for monitoring
+                    nats.sendNotice(Notice({
+                      isLog: true,
+                      subject: logSubject,
+                      payload: {request: IncomingNotice.get(), response: response},
+                      tx: IncomingNotice.getTx(),
+                      service: service.getFullName()
+                    }));
+                  }
                 }
 
                 // log it to console
@@ -864,17 +872,20 @@ const makeSendRequest = (nats, service) =>
         .then(rawResponse => Response(rawResponse))
         .then(rawResponse => {
           const responseTime = moment.duration(new Date() - start).asSeconds();
-          // build the subject where to publish service logs
-          const logSubject = "__REQUEST__" + '.' + rawResponse.getSubject();
 
-          // also publish the tuple request response for monitoring
-          nats.sendNotice(Notice({
-            isLog: true,
-            subject: logSubject,
-            payload: { request: outgoingRequest, response: rawResponse },
-            tx: outgoingRequest.getTx(),
-            service: service.getFullName()
-          }));
+          if (service.logger.options.enableRequestNatsLog){
+            // build the subject where to publish service logs
+            const logSubject = "__REQUEST__" + '.' + rawResponse.getSubject();
+
+            // also publish the tuple request response for monitoring
+            nats.sendNotice(Notice({
+              isLog: true,
+              subject: logSubject,
+              payload: { request: outgoingRequest, response: rawResponse },
+              tx: outgoingRequest.getTx(),
+              service: service.getFullName()
+            }));
+          }
 
           // log it to console
           service.logger.child()
