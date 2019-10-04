@@ -476,7 +476,6 @@ const Nats = stampit({
       if (timeout) this.timeout = timeout;
 
       this.logger = logger.child({ component: 'Nats' })
-      console.log();
     }
   ],
   methods: {

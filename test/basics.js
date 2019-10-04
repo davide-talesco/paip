@@ -491,7 +491,7 @@ experiment('transaction Id:', ()=> {
   });
 });
 
-experiment('log notice messages:', ()=>{
+experiment('log notice messages using options:', ()=>{
 
   test('exposed method generates __LOG.<SERVICE_FULLNAME>.__EXPOSE__.<METHOD_SUBJECT>', async()=>{
     const server = Paip({ name: "server", log: "off", enableObserveNatsLog: true, enableRequestNatsLog: true, enableExposeNatsLog: true });
@@ -702,6 +702,268 @@ experiment('log notice messages:', ()=>{
   test('observe method that throws generates __LOG.<SERVICE_FULLNAME>.__OBSERVE__.<METHOD_SUBJECT>', async()=>{
     const server = Paip({ name: "server", log: "off", enableObserveNatsLog: true, enableRequestNatsLog: true, enableExposeNatsLog: true });
     const client = Paip({ name: "client", log: "off", enableObserveNatsLog: true, enableRequestNatsLog: true, enableExposeNatsLog: true });
+
+    var expectedLog = {
+      metadata: {},
+      service: 'client',
+      subject: '__LOG.client.__OBSERVE__.server.login',
+      payload:
+        { request:
+            { metadata: {},
+              service: 'server',
+              subject: 'server.login',
+              payload: { "user": "pippo"},
+              isPaipNotice: true },
+          response:
+            { metadata: {},
+              service: 'client',
+              subject: 'server.login',
+              error: {
+                "name": "Error",
+                "message": "pippone",
+                "statusCode": 500
+              },
+              statusCode: 500,
+              isPaipResponse: true } },
+      isPaipNotice: true };
+
+    var actualLog = {};
+
+    client.observe('server.login', function(notice){
+      throw new Error('pippone')
+    });
+
+    client.observe('__LOG.client.__OBSERVE__.server.login', function(notice){
+      actualLog = _.omit(notice.get(), ['time','tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.response.error.stack' ]);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await server.sendNotice({ subject: 'login', payload: { user: 'pippo'} });
+
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
+  });
+});
+
+experiment('log notice messages using environment variables:', ()=>{
+  process.env.PAIP_ENABLE_OBSERVE_NATS_LOG = 'true'
+  process.env.PAIP_ENABLE_REQUEST_NATS_LOG = 'true'
+  process.env.PAIP_ENABLE_EXPOSE_NATS_LOG = 'true'
+
+  test('exposed method generates __LOG.<SERVICE_FULLNAME>.__EXPOSE__.<METHOD_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off" });
+    const client = Paip({ name: "client", log: "off"});
+
+    var expectedLog = {
+      "subject": "__LOG.server.__EXPOSE__.echo",
+      "metadata": {},
+      "service": "server",
+      "payload": {
+        "request": {
+          "metadata": {},
+          "service": "client",
+          "subject": "server.echo",
+          "args": [],
+          "isPaipRequest": true
+        },
+        "response": {
+          "metadata": {},
+          "service": "server",
+          "subject": "server.echo",
+          "statusCode": 200,
+          "payload": 1,
+          "to": "client",
+          "isPaipResponse": true
+        }
+      },
+      'isPaipNotice': true
+    };
+
+    var actualLog = {};
+
+    server.expose('echo', function(r){
+      return 1
+    });
+
+    client.observe('__LOG.server.__EXPOSE__.echo', function(notice){
+      // clean up log from random properties
+      actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx']);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await client.sendRequest({ subject: 'server.echo' });
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
+  });
+  test('request generates __LOG.<SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off"});
+    const client = Paip({ name: "client", log: "off"});
+
+    var expectedLog = {
+      "metadata": {},
+      "service": "client",
+      "subject": "__LOG.client.__REQUEST__.server.echo",
+      "payload": {
+        "request": {
+          "metadata": {},
+          "service": "client",
+          "subject": "server.echo",
+          "args": [],
+          "isPaipRequest": true
+        },
+        "response": {
+          "metadata": {},
+          "service": "server",
+          "subject": "server.echo",
+          "statusCode": 200,
+          "payload": 1,
+          "to": "client",
+          "isPaipResponse": true
+        }
+      },
+      "isPaipNotice": true
+    }
+
+
+    var actualLog = {};
+
+    server.expose('echo', function(r){
+      return 1
+    });
+
+    server.observe('__LOG.client.__REQUEST__.server.echo', function(notice){
+      // clean up log from random properties
+      actualLog = _.omit(notice.get(), ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx']);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await client.sendRequest({ subject: 'server.echo' });
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
+
+  });
+  test('request time out generates __LOG.<SERVICE_FULLNAME>.__REQUEST__.<REQUEST_SUBJECT>', async()=>{
+    const client = Paip({ name: "client", log: "off", timeout: 100});
+
+    var expectedLog = {
+      "metadata": {},
+      "service": "client",
+      "subject": "__LOG.client.__REQUEST__.unknown",
+      "payload": {
+        "request": {
+          "metadata": {},
+          "service": "client",
+          "subject": "unknown",
+          "args": [],
+          "isPaipRequest": true
+        },
+        "response": {
+          "metadata": {},
+          "service": "client",
+          "subject": "unknown",
+          "error": {
+            "name": "NatsError",
+            "message": "The request timed out for subscription id: -1",
+            "code": "REQ_TIMEOUT",
+            "statusCode": 500
+          },
+          "statusCode": 500,
+          "to": "client",
+          "isPaipResponse": true
+        }
+      },
+      "isPaipNotice": true
+    }
+
+    var actualLog = {};
+
+    client.observe('__LOG.client.__REQUEST__.unknown', function(notice){
+      const log = notice.get();
+
+      // clean up log from random properties
+      actualLog = _.omit(log, ['time', 'tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.response.error.stack']);
+
+    });
+
+    await client.ready();
+
+    try {
+      await client.sendRequest({ subject: 'unknown' }).then(r => r.getPayload())
+    }catch(e){
+      expect(e).to.be.an.error()
+    }
+
+    // TODO can I avoid to base this test on time?
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await client.shutdown();
+  });
+  test('observe method generates __LOG.<SERVICE_FULLNAME>.__OBSERVE__.<METHOD_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off"});
+    const client = Paip({ name: "client", log: "off"});
+
+    var expectedLog = {
+      metadata: {},
+      service: 'client',
+      subject: '__LOG.client.__OBSERVE__.server.login',
+      payload:
+        { request:
+            { metadata: {},
+              service: 'server',
+              subject: 'server.login',
+              isPaipNotice: true },
+          response:
+            { metadata: {},
+              service: 'client',
+              subject: 'server.login',
+              statusCode: 200,
+              isPaipResponse: true } },
+      isPaipNotice: true };
+
+    var actualLog = {};
+
+    client.observe('server.login', function(notice){
+      // do not return anything
+    });
+
+    client.observe('__LOG.client.__OBSERVE__.server.login', function(notice){
+      actualLog = _.omit(notice.get(), ['time','tx', 'payload.request.time', 'payload.request.tx', 'payload.response.time', 'payload.response.tx', 'payload.request.payload' ]);
+    });
+
+    await server.ready();
+    await client.ready();
+
+    await server.sendNotice({ subject: 'login', payload: { user: 'pippo'} });
+
+    await new Promise(r => setTimeout(() => r(), delay));
+    expect(actualLog).to.be.equal(expectedLog);
+
+    await server.shutdown();
+    await client.shutdown();
+  });
+  test('observe method that throws generates __LOG.<SERVICE_FULLNAME>.__OBSERVE__.<METHOD_SUBJECT>', async()=>{
+    const server = Paip({ name: "server", log: "off"});
+    const client = Paip({ name: "client", log: "off"});
 
     var expectedLog = {
       metadata: {},
