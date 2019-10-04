@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "code": "^5.2.0",
-    "lab": "^15.5.0",
+    "lab": "^18.0.2",
     "ldapjs": "^1.0.2",
     "super-error": "^2.2.0"
   }
