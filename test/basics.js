@@ -491,7 +491,7 @@ experiment('transaction Id:', ()=> {
   });
 });
 
-/* experiment('log notice messages:', ()=>{
+experiment('log notice messages:', ()=>{
 
   test('exposed method generates __LOG.<SERVICE_FULLNAME>.__EXPOSE__.<METHOD_SUBJECT>', async()=>{
     const server = Paip({ name: "server", log: "off", enableObserveNatsLog: true, enableRequestNatsLog: true, enableExposeNatsLog: true });
@@ -748,7 +748,7 @@ experiment('transaction Id:', ()=> {
     await server.shutdown();
     await client.shutdown();
   });
-}); */
+});
 
 experiment('expose middleware:', ()=> {
   var server;
