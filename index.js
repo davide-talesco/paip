@@ -66,22 +66,27 @@ const Logger = stampit({
         debug: 20,
         trace: 10
       };
-
-      log = process.env.PAIP_LOG || log;
+      this.options = {
+        // 10 === trace, 20 === debug, 30 === info , 40 === warn, 50 === error 60 === off
+        log : process.env.PAIP_LOG || log || 30
+      };
 
       this._payload = {};
 
       if (log) {
         assert(
-          Object.keys(LOG_LEVEL_MAP).includes(log),
-          `log must be one of [ ${Object.keys(LOG_LEVEL_MAP)} ]`
+          Object.keys(LOG_LEVEL_MAP).concat(Object.values(LOG_LEVEL_MAP)).includes(log),
+          `log must be one of [ ${Object.keys(LOG_LEVEL_MAP).concat(Object.values(LOG_LEVEL_MAP))} ]`
         );
-        this.options.logLevel = LOG_LEVEL_MAP[log];
+        // this is orrible!
+        if (typeof log === 'string'){
+          this.options.log = LOG_LEVEL_MAP[log];
+        }
       }
 
-      this.options.enableObserveNatsLog = (process.env.PAIP_ENABLE_OBSERVE_NATS_LOG || enableObserveNatsLog) === 'true'
-      this.options.enableRequestNatsLog = (process.env.PAIP_ENABLE_REQUEST_NATS_LOG || enableRequestNatsLog) === 'true'
-      this.options.enableExposeNatsLog = (process.env.PAIP_ENABLE_EXPOSE_NATS_LOG || enableExposeNatsLog) === 'true'
+      this.options.enableObserveNatsLog = (process.env.PAIP_ENABLE_OBSERVE_NATS_LOG === 'true' || enableObserveNatsLog)
+      this.options.enableRequestNatsLog = (process.env.PAIP_ENABLE_REQUEST_NATS_LOG === 'true' || enableRequestNatsLog) 
+      this.options.enableExposeNatsLog = (process.env.PAIP_ENABLE_EXPOSE_NATS_LOG === 'true' || enableExposeNatsLog)
     }
   ],
   methods: {
@@ -93,28 +98,33 @@ const Logger = stampit({
     },
     trace() {
       this._payload.level = 10;
-      if (this.options.logLevel <= this._payload.level)
+      if (!this._payload.timestamp) this.set({ timestamp: new Date() })
+      if (this.options.log <= this._payload.level)
         console.log(JSON.stringify(this._payload));
     },
     debug() {
       this._payload.level = 20;
-      if (this.options.logLevel <= this._payload.level)
+      if (!this._payload.timestamp) this.set({ timestamp: new Date() })
+      if (this.options.log <= this._payload.level)
         console.log(JSON.stringify(this._payload));
     },
     info() {
       this._payload.level = 30;
-      if (this.options.logLevel <= this._payload.level)
+      if (!this._payload.timestamp) this.set({ timestamp: new Date() })
+      if (this.options.log <= this._payload.level)
         console.log(JSON.stringify(this._payload));
     },
     warn() {
       this._payload.level = 40;
-      if (this.options.logLevel <= this._payload.level)
+      if (!this._payload.timestamp) this.set({ timestamp: new Date() })
+      if (this.options.log <= this._payload.level)
         console.log(JSON.stringify(this._payload));
     },
     error(err) {
       this._payload.level = 50;
+      if (!this._payload.timestamp) this.set({ timestamp: new Date() })
       if (err) this._payload.error = JSON.stringify(err, serializeError);
-      if (this.options.logLevel <= this._payload.level)
+      if (this.options.log <= this._payload.level)
         console.log(JSON.stringify(this._payload));
     },
     set(props) {
@@ -123,12 +133,6 @@ const Logger = stampit({
       Object.keys(props).map(n => (this._payload[n] = props[n]));
 
       return this;
-    }
-  },
-  props: {
-    options: {
-      // 10 === trace, 20 === debug, 30 === info , 40 === warn, 50 === error
-      logLevel: 30
     }
   }
 });
@@ -472,6 +476,7 @@ const Nats = stampit({
       if (timeout) this.timeout = timeout;
 
       this.logger = logger.child({ component: 'Nats' })
+      console.log();
     }
   ],
   methods: {
