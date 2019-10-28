@@ -567,10 +567,10 @@ const Nats = stampit({
       return new Promise((resolve) => {
         assert(_.isObject(notice), 'message must be an object in sendNotice');
         assert(_.isString(notice.subject), 'message.subject must be a string in sendNotice');
-        this.socket.publish(notice.subject, notice, () => {
-          logger.child().set({ message: 'sent Notice', notice }).trace();
-          resolve();
-        });
+
+        this.socket.publish(notice.subject, notice);
+        logger.child().set({ message: 'sent Notice', notice }).trace();
+        resolve();
       });
     },
     expose(subject, queue, handler) {
@@ -914,7 +914,7 @@ const makeSendRequest = (nats, service) =>
 const makeSendNotice = (nats, service) =>
   outgoingNotice => {
     const start = new Date();
-    return nats.sendNotice(outgoingNotice)
+    nats.sendNotice(outgoingNotice)
       .then(() => {
         // log it to console
         service.logger.child()
@@ -928,6 +928,7 @@ const makeSendNotice = (nats, service) =>
           .set({ message: 'sent Notice'})
           .set({ notice: outgoingNotice.getSummary()}).info();
       })
+      return Promise.resolve();
   };
 
 // this is the only exposed function
@@ -963,11 +964,9 @@ const Paip = function( options = {} ){
 
   // send the notice at message.subject, namespaced under service full name and return nothing
   const sendNotice = function(message){
-    return new Promise((resolve, reject) => {
-      // build outgoing request
-      return resolve(Notice(_.extend({ service: _service.getFullName() }, message)))
-    })
-      .then(makeSendNotice(_nats, _service))
+    const notice = Notice({ ...message, service: _service.getFullName() });
+    makeSendNotice(_nats, _service)(notice)
+    return Promise.resolve();
   };
 
   // register an expose middleware
